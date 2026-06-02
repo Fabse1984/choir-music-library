@@ -4,9 +4,10 @@ WordPress-Plugin fuer einen geschuetzten Chor-Notenbereich.
 
 ## Installation
 
-1. Den Ordner `choir-music-library` nach `wp-content/plugins/` kopieren.
-2. Im WordPress-Backend das Plugin "Choir Music Library" aktivieren.
-3. Unter "Chor-Noten" Musikstuecke anlegen.
+1. Unter 'Code', Download as .zip auswählen.
+2. Plugin bei WordPress hochladen.
+3. Im WordPress-Backend das Plugin "Choir Music Library" aktivieren.
+4. Unter "Chor-Noten" Musikstuecke anlegen.
 
 ## Inhalte
 
