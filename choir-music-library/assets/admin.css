@@ -1,0 +1,62 @@
+.cml-admin-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.cml-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.cml-field input,
+.cml-field textarea {
+    width: 100%;
+}
+
+.cml-field-extra_info,
+.cml-field-singing_info {
+    grid-column: 1 / -1;
+}
+
+.cml-file-group {
+    border: 1px solid #dcdcde;
+    margin-top: 18px;
+    padding: 14px;
+}
+
+.cml-file-group-header {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+}
+
+.cml-file-group-header h3 {
+    margin: 0;
+}
+
+.cml-file-row {
+    align-items: center;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(160px, 1fr) minmax(160px, 1.2fr) auto auto;
+    margin-top: 10px;
+}
+
+.cml-file-title {
+    width: 100%;
+}
+
+.cml-file-name {
+    color: #646970;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cml-access-option {
+    display: block;
+    margin: 8px 0;
+}
