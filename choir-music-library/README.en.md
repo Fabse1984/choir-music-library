@@ -4,9 +4,10 @@ WordPress plugin for a protected choir score library.
 
 ## Installation
 
-1. Copy the `choir-music-library` folder to `wp-content/plugins/`.
-2. Activate the "Choir Music Library" plugin in the WordPress admin area.
-3. Create music pieces under "Choir Scores".
+1. Under "Code", select "Download ZIP".
+2. Upload the plugin ZIP in WordPress.
+3. Activate the "Choir Music Library" plugin in the WordPress admin area.
+4. Create music pieces under "Choir Scores".
 
 ## Content
 
@@ -15,7 +16,6 @@ Each music piece can contain:
 - song name via the post title
 - composer
 - lyricist
-- arranger
 - voicing
 - additional information
 - singing information
@@ -31,6 +31,12 @@ The plugin reads membership levels from WP Simple Membership / Simple Membership
 
 File and audio links are served through a protected WordPress route and check access before delivery.
 
+## Member Submissions
+
+Under `Choir Scores > Settings`, choose which Simple Membership levels may submit music. Members of these levels can submit new music pieces as well as files or changes for existing music pieces.
+
+All submissions are saved for review first. Administrators find them under `Choir Scores > Submissions` and can approve or reject them. A new music piece is published, or an existing music piece is updated, only after approval.
+
 ## Frontend
 
 Overview page:
@@ -43,6 +49,12 @@ Single music piece on any page:
 
 ```text
 [chor_musikstueck id="123"]
+```
+
+Submission form for allowed members:
+
+```text
+[chor_musik_einreichen]
 ```
 
 Music pieces are also available through the custom post type archive and single views.

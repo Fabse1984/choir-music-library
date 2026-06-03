@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Choir Music Library
  * Description: Geschuetzter Notenbereich fuer Chor-Webseiten mit Noten, Hoerbeispielen, Aussprachehilfen und Zusatzdateien.
- * Version: 1.2.5
+ * Version: 1.2.8
  * Author: Codex
  * Text Domain: choir-music-library
  */
@@ -12,11 +12,14 @@ if (!defined('ABSPATH')) {
 }
 
 final class CML_Choir_Music_Library {
-    const VERSION = '1.2.5';
+    const VERSION = '1.2.8';
     const POST_TYPE = 'cml_piece';
+    const SUBMISSION_POST_TYPE = 'cml_submission';
     const TAG_TAX = 'cml_piece_tag';
     const META_KEY = '_cml_piece_data';
+    const SUBMISSION_META_KEY = '_cml_submission_data';
     const OPTION_LANGUAGE = 'cml_language';
+    const OPTION_SUBMISSION_LEVELS = 'cml_submission_levels';
     const OPTION_WATERMARK_SCOPE = 'cml_watermark_scope';
     const OPTION_WATERMARK_LEAD_TEXT = 'cml_watermark_lead_text';
     const OPTION_WATERMARK_BRAND_TEXT = 'cml_watermark_brand_text';
@@ -36,6 +39,7 @@ final class CML_Choir_Music_Library {
 
     private function __construct() {
         add_action('init', array($this, 'register_post_type'));
+        add_action('init', array($this, 'register_submission_post_type'));
         add_action('init', array($this, 'register_taxonomy'));
         add_action('add_meta_boxes', array($this, 'add_meta_boxes'));
         add_action('save_post_' . self::POST_TYPE, array($this, 'save_piece'), 10, 2);
@@ -46,6 +50,9 @@ final class CML_Choir_Music_Library {
         add_action('pre_get_posts', array($this, 'filter_frontend_queries'));
         add_action('admin_post_cml_file', array($this, 'serve_file'));
         add_action('admin_post_nopriv_cml_file', array($this, 'serve_file'));
+        add_action('admin_post_cml_submit_piece', array($this, 'handle_piece_submission'));
+        add_action('admin_post_nopriv_cml_submit_piece', array($this, 'handle_piece_submission'));
+        add_action('admin_post_cml_review_submission', array($this, 'handle_submission_review'));
         add_action('wpsc_payment_ipn_processed', array($this, 'handle_wpsc_payment'), 10, 10);
         add_action('wpsc_paypal_ipn_processed', array($this, 'handle_wpsc_payment'), 10, 10);
         add_action('wpsc_stripe_ipn_processed', array($this, 'handle_wpsc_payment'), 10, 10);
@@ -53,6 +60,7 @@ final class CML_Choir_Music_Library {
         add_filter('the_content', array($this, 'render_single_content'));
         add_shortcode('chor_noten_uebersicht', array($this, 'overview_shortcode'));
         add_shortcode('chor_musikstueck', array($this, 'piece_shortcode'));
+        add_shortcode('chor_musik_einreichen', array($this, 'submission_shortcode'));
     }
 
     public function register_post_type() {
@@ -72,6 +80,19 @@ final class CML_Choir_Music_Library {
             'has_archive' => true,
             'rewrite' => array('slug' => 'musikstuecke'),
             'show_in_rest' => true,
+        ));
+    }
+
+    public function register_submission_post_type() {
+        register_post_type(self::SUBMISSION_POST_TYPE, array(
+            'labels' => array(
+                'name' => $this->text('submissions'),
+                'singular_name' => $this->text('submission'),
+            ),
+            'public' => false,
+            'show_ui' => false,
+            'supports' => array('title'),
+            'capability_type' => 'post',
         ));
     }
 
@@ -120,11 +141,14 @@ final class CML_Choir_Music_Library {
     public function enqueue_admin_assets($hook) {
         global $post_type;
 
-        if (self::POST_TYPE !== $post_type) {
+        $is_cml_page = self::POST_TYPE === $post_type || false !== strpos((string) $hook, 'cml-submissions') || false !== strpos((string) $hook, 'cml-settings');
+        if (!$is_cml_page) {
             return;
         }
 
-        wp_enqueue_media();
+        if (self::POST_TYPE === $post_type) {
+            wp_enqueue_media();
+        }
         wp_enqueue_style('cml-admin', plugins_url('assets/admin.css', __FILE__), array(), self::VERSION);
         wp_enqueue_script('cml-admin', plugins_url('assets/admin.js', __FILE__), array('jquery'), self::VERSION, true);
         wp_localize_script('cml-admin', 'cmlAdminLabels', array(
@@ -144,6 +168,15 @@ final class CML_Choir_Music_Library {
             'cml-settings',
             array($this, 'render_settings_page')
         );
+
+        add_submenu_page(
+            'edit.php?post_type=' . self::POST_TYPE,
+            $this->text('submissions'),
+            $this->text('submissions'),
+            'manage_options',
+            'cml-submissions',
+            array($this, 'render_submissions_page')
+        );
     }
 
     public function register_settings() {
@@ -151,6 +184,12 @@ final class CML_Choir_Music_Library {
             'type' => 'string',
             'sanitize_callback' => array($this, 'sanitize_language'),
             'default' => 'de',
+        ));
+
+        register_setting('cml_settings', self::OPTION_SUBMISSION_LEVELS, array(
+            'type' => 'array',
+            'sanitize_callback' => array($this, 'sanitize_scalar_list'),
+            'default' => array(),
         ));
 
         register_setting('cml_settings', self::OPTION_WATERMARK_SCOPE, array(
@@ -197,6 +236,8 @@ final class CML_Choir_Music_Library {
         }
 
         $language = $this->get_language();
+        $submission_levels = $this->get_submission_levels();
+        $membership_levels = $this->get_membership_levels();
         $watermark_scope = $this->get_watermark_scope();
         $watermark_lead_text = get_option(self::OPTION_WATERMARK_LEAD_TEXT, '');
         $watermark_brand_text = get_option(self::OPTION_WATERMARK_BRAND_TEXT, '');
@@ -218,6 +259,21 @@ final class CML_Choir_Music_Library {
                                 <option value="en" <?php selected($language, 'en'); ?>>English</option>
                             </select>
                             <p class="description"><?php echo esc_html($this->text('language_description')); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html($this->text('submission_levels')); ?></th>
+                        <td>
+                            <?php if (empty($membership_levels)) : ?>
+                                <p><em><?php echo esc_html($this->text('no_levels')); ?></em></p>
+                            <?php endif; ?>
+                            <?php foreach ($membership_levels as $level_id => $level_name) : ?>
+                                <label class="cml-access-option">
+                                    <input type="checkbox" name="<?php echo esc_attr(self::OPTION_SUBMISSION_LEVELS); ?>[]" value="<?php echo esc_attr($level_id); ?>" <?php checked(in_array((string) $level_id, $submission_levels, true)); ?>>
+                                    <?php echo esc_html($level_name); ?>
+                                </label>
+                            <?php endforeach; ?>
+                            <p class="description"><?php echo esc_html($this->text('submission_levels_description')); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -260,7 +316,7 @@ final class CML_Choir_Music_Library {
         wp_register_style('cml-frontend', plugins_url('assets/frontend.css', __FILE__), array(), self::VERSION);
         wp_register_script('cml-frontend', plugins_url('assets/frontend.js', __FILE__), array(), self::VERSION, true);
 
-        if (is_singular(self::POST_TYPE) || $this->current_post_has_shortcode('chor_noten_uebersicht') || $this->current_post_has_shortcode('chor_musikstueck')) {
+        if (is_singular(self::POST_TYPE) || $this->current_post_has_shortcode('chor_noten_uebersicht') || $this->current_post_has_shortcode('chor_musikstueck') || $this->current_post_has_shortcode('chor_musik_einreichen')) {
             wp_enqueue_style('cml-frontend');
             wp_enqueue_script('cml-frontend');
         }
@@ -451,6 +507,199 @@ final class CML_Choir_Music_Library {
         update_post_meta($post_id, self::META_KEY, $data);
     }
 
+    public function handle_piece_submission() {
+        if (!isset($_POST['cml_submission_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['cml_submission_nonce'])), 'cml_submit_piece')) {
+            $this->redirect_submission_result('error');
+        }
+
+        if (!$this->current_user_can_submit_music()) {
+            $this->redirect_submission_result('error');
+        }
+
+        $type = isset($_POST['cml_submission_type']) ? sanitize_key(wp_unslash($_POST['cml_submission_type'])) : 'new_piece';
+        if (!in_array($type, array('new_piece', 'existing_piece'), true)) {
+            $type = 'new_piece';
+        }
+
+        $target_piece = isset($_POST['cml_submission_target']) ? absint($_POST['cml_submission_target']) : 0;
+        if ('existing_piece' === $type && (!$target_piece || !$this->current_user_can_access_piece($target_piece))) {
+            $this->redirect_submission_result('error');
+        }
+
+        $title = isset($_POST['cml_submission_title']) ? sanitize_text_field(wp_unslash($_POST['cml_submission_title'])) : '';
+        if ('new_piece' === $type && '' === trim($title)) {
+            $this->redirect_submission_result('error');
+        }
+
+        if ('existing_piece' === $type) {
+            $title = get_the_title($target_piece);
+        }
+
+        $raw = isset($_POST['cml']) && is_array($_POST['cml']) ? wp_unslash($_POST['cml']) : array();
+        $data = $this->sanitize_submission_piece_data($raw);
+        $files = $this->handle_submission_uploads();
+        $data = array_merge($data, $files);
+
+        if ('existing_piece' === $type && !$this->submission_has_content($data)) {
+            $this->redirect_submission_result('error');
+        }
+
+        $submission_id = wp_insert_post(array(
+            'post_type' => self::SUBMISSION_POST_TYPE,
+            'post_status' => 'pending',
+            'post_title' => $title,
+            'post_author' => get_current_user_id(),
+        ), true);
+
+        if (is_wp_error($submission_id) || !$submission_id) {
+            $this->redirect_submission_result('error');
+        }
+
+        update_post_meta($submission_id, self::SUBMISSION_META_KEY, array(
+            'type' => $type,
+            'target_piece' => $target_piece,
+            'submitted_by' => get_current_user_id(),
+            'submitted_level' => $this->get_current_membership_level(),
+            'piece_data' => $data,
+        ));
+
+        $this->redirect_submission_result('sent');
+    }
+
+    public function handle_submission_review() {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html($this->text('access_denied')));
+        }
+
+        $submission_id = isset($_POST['submission_id']) ? absint($_POST['submission_id']) : 0;
+        $review_action = isset($_POST['review_action']) ? sanitize_key(wp_unslash($_POST['review_action'])) : '';
+
+        if (!$submission_id || !wp_verify_nonce(isset($_POST['_wpnonce']) ? sanitize_text_field(wp_unslash($_POST['_wpnonce'])) : '', 'cml_review_submission_' . $submission_id)) {
+            wp_die(esc_html($this->text('submission_error')));
+        }
+
+        if (!in_array($review_action, array('approve', 'reject'), true)) {
+            wp_die(esc_html($this->text('submission_error')));
+        }
+
+        if ('reject' === $review_action) {
+            update_post_meta($submission_id, '_cml_reviewed_by', get_current_user_id());
+            update_post_meta($submission_id, '_cml_reviewed_at', current_time('mysql'));
+            wp_update_post(array(
+                'ID' => $submission_id,
+                'post_status' => 'draft',
+            ));
+            $this->redirect_review_result('rejected');
+        }
+
+        $result = $this->approve_submission($submission_id);
+        if (is_wp_error($result)) {
+            $this->redirect_review_result('error');
+        }
+
+        update_post_meta($submission_id, '_cml_reviewed_by', get_current_user_id());
+        update_post_meta($submission_id, '_cml_reviewed_at', current_time('mysql'));
+        update_post_meta($submission_id, '_cml_approved_piece', absint($result));
+        wp_update_post(array(
+            'ID' => $submission_id,
+            'post_status' => 'publish',
+        ));
+
+        $this->redirect_review_result('approved');
+    }
+
+    public function render_submissions_page() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $submissions = get_posts(array(
+            'post_type' => self::SUBMISSION_POST_TYPE,
+            'post_status' => 'pending',
+            'posts_per_page' => -1,
+            'orderby' => 'date',
+            'order' => 'ASC',
+        ));
+        $status = isset($_GET['cml_review']) ? sanitize_key(wp_unslash($_GET['cml_review'])) : '';
+        ?>
+        <div class="wrap">
+            <h1><?php echo esc_html($this->text('submissions')); ?></h1>
+            <?php if ($status && 'error' !== $status) : ?>
+                <div class="notice notice-success"><p><?php echo esc_html($this->text('submission_' . $status)); ?></p></div>
+            <?php elseif ('error' === $status) : ?>
+                <div class="notice notice-error"><p><?php echo esc_html($this->text('submission_error')); ?></p></div>
+            <?php endif; ?>
+
+            <?php if (empty($submissions)) : ?>
+                <p><?php echo esc_html($this->text('no_submissions')); ?></p>
+            <?php endif; ?>
+
+            <?php foreach ($submissions as $submission) : ?>
+                <?php $this->render_submission_review_card($submission); ?>
+            <?php endforeach; ?>
+        </div>
+        <?php
+    }
+
+    private function render_submission_review_card($submission) {
+        $submission_data = $this->get_submission_data($submission->ID);
+        $piece_data = $submission_data['piece_data'];
+        $user = $submission_data['submitted_by'] ? get_user_by('id', $submission_data['submitted_by']) : null;
+        $target = $submission_data['target_piece'] ? get_post($submission_data['target_piece']) : null;
+        ?>
+        <section class="cml-submission-card">
+            <header>
+                <h2><?php echo esc_html(get_the_title($submission)); ?></h2>
+                <p>
+                    <?php echo esc_html('new_piece' === $submission_data['type'] ? $this->text('submit_new_piece') : $this->text('submit_existing_piece_files')); ?>
+                    <?php if ($target) : ?>
+                        - <a href="<?php echo esc_url(get_edit_post_link($target->ID)); ?>"><?php echo esc_html(get_the_title($target)); ?></a>
+                    <?php endif; ?>
+                </p>
+                <?php if ($user) : ?>
+                    <p><?php echo esc_html($this->text('submitted_by')); ?>: <?php echo esc_html($user->display_name); ?></p>
+                <?php endif; ?>
+            </header>
+
+            <dl class="cml-submission-facts">
+                <?php foreach (array('composer', 'lyricist', 'arranger', 'voicing', 'extra_info', 'singing_info') as $field) : ?>
+                    <?php if ('' === trim(wp_strip_all_tags((string) $piece_data[$field]))) {
+                        continue;
+                    } ?>
+                    <div>
+                        <dt><?php echo esc_html($this->text($field)); ?></dt>
+                        <dd><?php echo wp_kses_post(wpautop($piece_data[$field])); ?></dd>
+                    </div>
+                <?php endforeach; ?>
+            </dl>
+
+            <?php foreach ($this->file_group_labels() as $group => $label) : ?>
+                <?php if (empty($piece_data[$group])) {
+                    continue;
+                } ?>
+                <div class="cml-submission-files">
+                    <h3><?php echo esc_html($label); ?></h3>
+                    <ul>
+                        <?php foreach ($piece_data[$group] as $file) : ?>
+                            <li>
+                                <a href="<?php echo esc_url(wp_get_attachment_url(absint($file['id']))); ?>" target="_blank" rel="noopener"><?php echo esc_html($this->get_submission_file_label($file)); ?></a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endforeach; ?>
+
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="cml-review-actions">
+                <?php wp_nonce_field('cml_review_submission_' . $submission->ID); ?>
+                <input type="hidden" name="action" value="cml_review_submission">
+                <input type="hidden" name="submission_id" value="<?php echo esc_attr($submission->ID); ?>">
+                <button type="submit" name="review_action" value="approve" class="button button-primary"><?php echo esc_html($this->text('approve_submission')); ?></button>
+                <button type="submit" name="review_action" value="reject" class="button"><?php echo esc_html($this->text('reject_submission')); ?></button>
+            </form>
+        </section>
+        <?php
+    }
+
     private function sanitize_file_group($raw, $key) {
         $ids = isset($raw[$key]) && is_array($raw[$key]) ? $raw[$key] : array();
         $titles = isset($raw[$key . '_titles']) && is_array($raw[$key . '_titles']) ? $raw[$key . '_titles'] : array();
@@ -471,7 +720,178 @@ final class CML_Choir_Music_Library {
         return $files;
     }
 
-    private function sanitize_scalar_list($values) {
+    private function sanitize_submission_piece_data($raw) {
+        return array(
+            'composer' => isset($raw['composer']) ? sanitize_text_field($raw['composer']) : '',
+            'lyricist' => isset($raw['lyricist']) ? sanitize_text_field($raw['lyricist']) : '',
+            'arranger' => isset($raw['arranger']) ? sanitize_text_field($raw['arranger']) : '',
+            'voicing' => isset($raw['voicing']) ? sanitize_text_field($raw['voicing']) : '',
+            'extra_info' => isset($raw['extra_info']) ? wp_kses_post($raw['extra_info']) : '',
+            'singing_info' => isset($raw['singing_info']) ? wp_kses_post($raw['singing_info']) : '',
+            'purchase_required' => 0,
+            'purchase_product_key' => '',
+            'purchase_shortcode' => '',
+            'allowed_levels' => array(),
+            'scores' => array(),
+            'audio_samples' => array(),
+            'pronunciation' => array(),
+            'misc' => array(),
+        );
+    }
+
+    private function handle_submission_uploads() {
+        $uploads = array(
+            'scores' => array(),
+            'audio_samples' => array(),
+            'pronunciation' => array(),
+            'misc' => array(),
+        );
+
+        if (empty($_FILES['cml_files']) || !is_array($_FILES['cml_files'])) {
+            return $uploads;
+        }
+
+        if (!function_exists('wp_handle_upload')) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+        }
+        if (!function_exists('wp_generate_attachment_metadata')) {
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+        }
+
+        $titles = isset($_POST['cml_file_titles']) && is_array($_POST['cml_file_titles']) ? wp_unslash($_POST['cml_file_titles']) : array();
+        $files = $_FILES['cml_files'];
+
+        foreach (array_keys($uploads) as $group) {
+            if (empty($files['name'][$group]) || !is_array($files['name'][$group])) {
+                continue;
+            }
+
+            foreach ($files['name'][$group] as $index => $name) {
+                if (empty($name) || !isset($files['tmp_name'][$group][$index])) {
+                    continue;
+                }
+
+                $file = array(
+                    'name' => sanitize_file_name($name),
+                    'type' => isset($files['type'][$group][$index]) ? $files['type'][$group][$index] : '',
+                    'tmp_name' => $files['tmp_name'][$group][$index],
+                    'error' => isset($files['error'][$group][$index]) ? $files['error'][$group][$index] : 0,
+                    'size' => isset($files['size'][$group][$index]) ? $files['size'][$group][$index] : 0,
+                );
+
+                if (!empty($file['error'])) {
+                    continue;
+                }
+
+                $uploaded = wp_handle_upload($file, array('test_form' => false));
+                if (empty($uploaded['file']) || !empty($uploaded['error'])) {
+                    continue;
+                }
+
+                $attachment_id = wp_insert_attachment(array(
+                    'post_mime_type' => isset($uploaded['type']) ? $uploaded['type'] : '',
+                    'post_title' => preg_replace('/\.[^.]+$/', '', basename($uploaded['file'])),
+                    'post_content' => '',
+                    'post_status' => 'inherit',
+                    'post_author' => get_current_user_id(),
+                ), $uploaded['file']);
+
+                if (!$attachment_id || is_wp_error($attachment_id)) {
+                    continue;
+                }
+
+                $metadata = wp_generate_attachment_metadata($attachment_id, $uploaded['file']);
+                wp_update_attachment_metadata($attachment_id, $metadata);
+
+                $uploads[$group][] = array(
+                    'id' => absint($attachment_id),
+                    'title' => isset($titles[$group]) ? sanitize_text_field($titles[$group]) : '',
+                );
+            }
+        }
+
+        return $uploads;
+    }
+
+    private function submission_has_content($data) {
+        foreach (array('composer', 'lyricist', 'arranger', 'voicing', 'extra_info', 'singing_info') as $field) {
+            if ('' !== trim(wp_strip_all_tags((string) $data[$field]))) {
+                return true;
+            }
+        }
+
+        foreach (array('scores', 'audio_samples', 'pronunciation', 'misc') as $group) {
+            if (!empty($data[$group])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function approve_submission($submission_id) {
+        $submission = get_post($submission_id);
+        if (!$submission || self::SUBMISSION_POST_TYPE !== $submission->post_type || 'pending' !== $submission->post_status) {
+            return new WP_Error('cml_invalid_submission', $this->text('submission_error'));
+        }
+
+        $submission_data = $this->get_submission_data($submission_id);
+        $piece_data = $submission_data['piece_data'];
+
+        if ('new_piece' === $submission_data['type']) {
+            $piece_id = wp_insert_post(array(
+                'post_type' => self::POST_TYPE,
+                'post_status' => 'publish',
+                'post_title' => get_the_title($submission),
+                'post_author' => $submission_data['submitted_by'] ? absint($submission_data['submitted_by']) : get_current_user_id(),
+            ), true);
+
+            if (is_wp_error($piece_id) || !$piece_id) {
+                return new WP_Error('cml_create_piece_failed', $this->text('submission_error'));
+            }
+
+            update_post_meta($piece_id, self::META_KEY, $piece_data);
+            $this->attach_submission_files_to_piece($piece_data, $piece_id);
+            return $piece_id;
+        }
+
+        $target_piece = absint($submission_data['target_piece']);
+        if (!$target_piece || self::POST_TYPE !== get_post_type($target_piece)) {
+            return new WP_Error('cml_missing_target_piece', $this->text('submission_error'));
+        }
+
+        $current = $this->get_piece_data($target_piece);
+        foreach (array('composer', 'lyricist', 'arranger', 'voicing', 'extra_info', 'singing_info') as $field) {
+            if ('' !== trim(wp_strip_all_tags((string) $piece_data[$field]))) {
+                $current[$field] = $piece_data[$field];
+            }
+        }
+        foreach (array('scores', 'audio_samples', 'pronunciation', 'misc') as $group) {
+            if (!empty($piece_data[$group])) {
+                $current[$group] = array_merge($current[$group], $piece_data[$group]);
+            }
+        }
+
+        update_post_meta($target_piece, self::META_KEY, $current);
+        $this->attach_submission_files_to_piece($piece_data, $target_piece);
+        return $target_piece;
+    }
+
+    private function attach_submission_files_to_piece($piece_data, $piece_id) {
+        foreach (array('scores', 'audio_samples', 'pronunciation', 'misc') as $group) {
+            foreach ($piece_data[$group] as $file) {
+                $attachment_id = isset($file['id']) ? absint($file['id']) : 0;
+                if ($attachment_id) {
+                    wp_update_post(array(
+                        'ID' => $attachment_id,
+                        'post_parent' => $piece_id,
+                    ));
+                }
+            }
+        }
+    }
+
+    public function sanitize_scalar_list($values) {
         if (!is_array($values)) {
             return array();
         }
@@ -490,6 +910,118 @@ final class CML_Choir_Music_Library {
     public function piece_shortcode($atts) {
         $atts = shortcode_atts(array('id' => get_the_ID()), $atts, 'chor_musikstueck');
         return $this->render_piece(absint($atts['id']));
+    }
+
+    public function submission_shortcode($atts) {
+        wp_enqueue_style('cml-frontend');
+
+        if (!$this->current_user_can_submit_music()) {
+            return '<div class="cml-access-denied">' . esc_html($this->text('submission_access_denied')) . '</div>';
+        }
+
+        $pieces = get_posts(array(
+            'post_type' => self::POST_TYPE,
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'orderby' => 'title',
+            'order' => 'ASC',
+        ));
+        usort($pieces, array($this, 'sort_pieces_by_title'));
+
+        $status = isset($_GET['cml_submission']) ? sanitize_key(wp_unslash($_GET['cml_submission'])) : '';
+
+        ob_start();
+        ?>
+        <section class="cml-submission">
+            <?php if ('sent' === $status) : ?>
+                <div class="cml-notice cml-notice-success"><?php echo esc_html($this->text('submission_sent')); ?></div>
+            <?php elseif ('error' === $status) : ?>
+                <div class="cml-notice cml-notice-error"><?php echo esc_html($this->text('submission_error')); ?></div>
+            <?php endif; ?>
+
+            <form class="cml-submission-form" method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" enctype="multipart/form-data">
+                <?php wp_nonce_field('cml_submit_piece', 'cml_submission_nonce'); ?>
+                <input type="hidden" name="action" value="cml_submit_piece">
+                <h2><?php echo esc_html($this->text('submit_music')); ?></h2>
+
+                <fieldset>
+                    <legend><?php echo esc_html($this->text('submission_type')); ?></legend>
+                    <label>
+                        <input type="radio" name="cml_submission_type" value="new_piece" checked>
+                        <?php echo esc_html($this->text('submit_new_piece')); ?>
+                    </label>
+                    <label>
+                        <input type="radio" name="cml_submission_type" value="existing_piece">
+                        <?php echo esc_html($this->text('submit_existing_piece_files')); ?>
+                    </label>
+                </fieldset>
+
+                <div class="cml-submission-grid">
+                    <p class="cml-field cml-field-title">
+                        <label for="cml_submission_title"><?php echo esc_html($this->text('songname')); ?></label>
+                        <input id="cml_submission_title" type="text" name="cml_submission_title">
+                    </p>
+                    <p class="cml-field cml-field-target">
+                        <label for="cml_submission_target"><?php echo esc_html($this->text('existing_piece')); ?></label>
+                        <select id="cml_submission_target" name="cml_submission_target">
+                            <option value="0"><?php echo esc_html($this->text('choose_existing_piece')); ?></option>
+                            <?php foreach ($pieces as $piece) : ?>
+                                <?php if (!$this->current_user_can_access_piece($piece->ID)) {
+                                    continue;
+                                } ?>
+                                <option value="<?php echo esc_attr($piece->ID); ?>"><?php echo esc_html(get_the_title($piece)); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </p>
+                    <p class="cml-field">
+                        <label for="cml_submission_composer"><?php echo esc_html($this->text('composer')); ?></label>
+                        <input id="cml_submission_composer" type="text" name="cml[composer]">
+                    </p>
+                    <p class="cml-field">
+                        <label for="cml_submission_lyricist"><?php echo esc_html($this->text('lyricist')); ?></label>
+                        <input id="cml_submission_lyricist" type="text" name="cml[lyricist]">
+                    </p>
+                    <p class="cml-field">
+                        <label for="cml_submission_arranger"><?php echo esc_html($this->text('arranger')); ?></label>
+                        <input id="cml_submission_arranger" type="text" name="cml[arranger]">
+                    </p>
+                    <p class="cml-field">
+                        <label for="cml_submission_voicing"><?php echo esc_html($this->text('voicing')); ?></label>
+                        <input id="cml_submission_voicing" type="text" name="cml[voicing]">
+                    </p>
+                    <p class="cml-field cml-field-extra_info">
+                        <label for="cml_submission_extra_info"><?php echo esc_html($this->text('extra_info')); ?></label>
+                        <textarea id="cml_submission_extra_info" name="cml[extra_info]" rows="4"></textarea>
+                    </p>
+                    <p class="cml-field cml-field-singing_info">
+                        <label for="cml_submission_singing_info"><?php echo esc_html($this->text('singing_info')); ?></label>
+                        <textarea id="cml_submission_singing_info" name="cml[singing_info]" rows="4"></textarea>
+                    </p>
+                </div>
+
+                <?php $this->render_frontend_upload_field('scores', $this->text('scores_pdf'), 'application/pdf'); ?>
+                <?php $this->render_frontend_upload_field('audio_samples', $this->text('audio_samples'), 'audio/*'); ?>
+                <?php $this->render_frontend_upload_field('pronunciation', $this->text('pronunciation'), ''); ?>
+                <?php $this->render_frontend_upload_field('misc', $this->text('misc'), ''); ?>
+
+                <p class="cml-submission-note"><?php echo esc_html($this->text('submission_review_hint')); ?></p>
+                <button type="submit" class="cml-submit-button"><?php echo esc_html($this->text('send_submission')); ?></button>
+            </form>
+            <?php $this->render_plugin_credit(); ?>
+        </section>
+        <?php
+
+        return ob_get_clean();
+    }
+
+    private function render_frontend_upload_field($key, $label, $accept) {
+        ?>
+        <div class="cml-upload-group">
+            <label for="cml_upload_<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></label>
+            <input id="cml_upload_<?php echo esc_attr($key); ?>" type="file" name="cml_files[<?php echo esc_attr($key); ?>][]" <?php echo $accept ? 'accept="' . esc_attr($accept) . '"' : ''; ?> multiple>
+            <input type="text" name="cml_file_titles[<?php echo esc_attr($key); ?>]" placeholder="<?php echo esc_attr($this->text('optional_file_title')); ?>">
+        </div>
+        <?php
     }
 
     public function overview_shortcode($atts) {
@@ -1166,6 +1698,89 @@ final class CML_Choir_Music_Library {
         return get_post_type_archive_link(self::POST_TYPE);
     }
 
+    private function current_user_can_submit_music() {
+        if (current_user_can('manage_options')) {
+            return true;
+        }
+
+        $level = $this->get_current_membership_level();
+        if (false === $level) {
+            return false;
+        }
+
+        $allowed_levels = $this->get_submission_levels();
+        if (empty($allowed_levels)) {
+            return false;
+        }
+
+        return in_array((string) $level, $allowed_levels, true);
+    }
+
+    private function get_submission_levels() {
+        $levels = get_option(self::OPTION_SUBMISSION_LEVELS, array());
+        return $this->sanitize_scalar_list(is_array($levels) ? $levels : array());
+    }
+
+    private function redirect_submission_result($status) {
+        $redirect = wp_get_referer();
+        if (!$redirect) {
+            $redirect = home_url('/');
+        }
+
+        wp_safe_redirect(add_query_arg('cml_submission', sanitize_key($status), $redirect));
+        exit;
+    }
+
+    private function redirect_review_result($status) {
+        wp_safe_redirect(add_query_arg(array(
+            'post_type' => self::POST_TYPE,
+            'page' => 'cml-submissions',
+            'cml_review' => sanitize_key($status),
+        ), admin_url('edit.php')));
+        exit;
+    }
+
+    private function get_submission_data($submission_id) {
+        $defaults = array(
+            'type' => 'new_piece',
+            'target_piece' => 0,
+            'submitted_by' => 0,
+            'submitted_level' => '',
+            'piece_data' => $this->sanitize_submission_piece_data(array()),
+        );
+
+        $data = get_post_meta($submission_id, self::SUBMISSION_META_KEY, true);
+        if (!is_array($data)) {
+            $data = array();
+        }
+
+        $data = array_merge($defaults, $data);
+        if (!is_array($data['piece_data'])) {
+            $data['piece_data'] = array();
+        }
+        $data['piece_data'] = array_merge($defaults['piece_data'], $data['piece_data']);
+
+        return $data;
+    }
+
+    private function file_group_labels() {
+        return array(
+            'scores' => $this->text('scores_pdf'),
+            'audio_samples' => $this->text('audio_samples'),
+            'pronunciation' => $this->text('pronunciation'),
+            'misc' => $this->text('misc'),
+        );
+    }
+
+    private function get_submission_file_label($file) {
+        $custom_title = $this->get_custom_file_title($file);
+        if ($custom_title) {
+            return $custom_title;
+        }
+
+        return $this->get_attachment_filename(isset($file['id']) ? absint($file['id']) : 0);
+    }
+
     private function current_user_can_access_piece($post_id) {
         if (current_user_can('edit_post', $post_id)) {
             return true;
@@ -1266,6 +1881,8 @@ final class CML_Choir_Music_Library {
                 'add_piece' => 'Neues Musikstueck anlegen',
                 'edit_piece' => 'Musikstueck bearbeiten',
                 'menu_name' => 'Chor-Noten',
+                'submissions' => 'Einreichungen',
+                'submission' => 'Einreichung',
                 'piece_tags' => 'Musikstueck-Tags',
                 'piece_tag' => 'Musikstueck-Tag',
                 'piece_information' => 'Musikstueck-Informationen',
@@ -1273,6 +1890,8 @@ final class CML_Choir_Music_Library {
                 'settings' => 'Einstellungen',
                 'language' => 'Sprache',
                 'language_description' => 'Stellt die vom Plugin ausgegebenen Texte auf Deutsch oder Englisch um.',
+                'submission_levels' => 'Einreichungen erlauben fuer',
+                'submission_levels_description' => 'Mitglieder dieser Simple-Membership-Level duerfen ueber den Shortcode [chor_musik_einreichen] neue Musikstuecke und Dateiergaenzungen einreichen.',
                 'watermark_scope' => 'PDF-Wasserzeichen',
                 'watermark_scope_all' => 'Alle PDF-Noten mit Wasserzeichen versehen',
                 'watermark_scope_paid' => 'Nur zahlungspflichtige PDF-Noten mit Wasserzeichen versehen',
@@ -1311,6 +1930,24 @@ final class CML_Choir_Music_Library {
                 'close_search' => 'Suche schliessen',
                 'songname' => 'Songname',
                 'tag' => 'Tag',
+                'submit_music' => 'Musik einreichen',
+                'submission_type' => 'Art der Einreichung',
+                'submit_new_piece' => 'Neues Musikstueck',
+                'submit_existing_piece_files' => 'Dateien oder Aenderungen zu bestehendem Musikstueck',
+                'existing_piece' => 'Bestehendes Musikstueck',
+                'choose_existing_piece' => 'Musikstueck auswaehlen',
+                'optional_file_title' => 'Optionaler Anzeigename fuer diese Datei-Gruppe',
+                'submission_review_hint' => 'Die Einreichung wird erst nach Pruefung durch einen Administrator angezeigt.',
+                'send_submission' => 'Zur Pruefung einreichen',
+                'submission_access_denied' => 'Du bist nicht fuer Musik-Einreichungen freigeschaltet.',
+                'submission_sent' => 'Danke, die Einreichung wurde zur Pruefung gespeichert.',
+                'submission_error' => 'Die Einreichung konnte nicht verarbeitet werden.',
+                'submission_approved' => 'Einreichung wurde freigegeben.',
+                'submission_rejected' => 'Einreichung wurde abgelehnt.',
+                'no_submissions' => 'Aktuell warten keine Einreichungen auf Pruefung.',
+                'submitted_by' => 'Eingereicht von',
+                'approve_submission' => 'Freigeben',
+                'reject_submission' => 'Ablehnen',
                 'reset' => 'Zuruecksetzen',
                 'apply' => 'Anwenden',
                 'access_denied' => 'Dieses Musikstueck ist fuer deine Mitgliedergruppe nicht freigegeben.',
@@ -1334,6 +1971,8 @@ final class CML_Choir_Music_Library {
                 'add_piece' => 'Add New Music Piece',
                 'edit_piece' => 'Edit Music Piece',
                 'menu_name' => 'Choir Scores',
+                'submissions' => 'Submissions',
+                'submission' => 'Submission',
                 'piece_tags' => 'Music Piece Tags',
                 'piece_tag' => 'Music Piece Tag',
                 'piece_information' => 'Music Piece Information',
@@ -1341,6 +1980,8 @@ final class CML_Choir_Music_Library {
                 'settings' => 'Settings',
                 'language' => 'Language',
                 'language_description' => 'Switches the texts generated by this plugin between German and English.',
+                'submission_levels' => 'Allow submissions for',
+                'submission_levels_description' => 'Members of these Simple Membership levels may submit new music pieces and file additions through the [chor_musik_einreichen] shortcode.',
                 'watermark_scope' => 'PDF Watermark',
                 'watermark_scope_all' => 'Watermark all PDF scores',
                 'watermark_scope_paid' => 'Watermark only paid PDF scores',
@@ -1379,6 +2020,24 @@ final class CML_Choir_Music_Library {
                 'close_search' => 'Close Search',
                 'songname' => 'Song Name',
                 'tag' => 'Tag',
+                'submit_music' => 'Submit Music',
+                'submission_type' => 'Submission Type',
+                'submit_new_piece' => 'New Music Piece',
+                'submit_existing_piece_files' => 'Files or Changes for Existing Music Piece',
+                'existing_piece' => 'Existing Music Piece',
+                'choose_existing_piece' => 'Choose Music Piece',
+                'optional_file_title' => 'Optional display name for this file group',
+                'submission_review_hint' => 'The submission will only be shown after administrator review.',
+                'send_submission' => 'Submit for Review',
+                'submission_access_denied' => 'You are not allowed to submit music.',
+                'submission_sent' => 'Thank you, the submission has been saved for review.',
+                'submission_error' => 'The submission could not be processed.',
+                'submission_approved' => 'Submission approved.',
+                'submission_rejected' => 'Submission rejected.',
+                'no_submissions' => 'There are no submissions waiting for review.',
+                'submitted_by' => 'Submitted by',
+                'approve_submission' => 'Approve',
+                'reject_submission' => 'Reject',
                 'reset' => 'Reset',
                 'apply' => 'Apply',
                 'access_denied' => 'This music piece is not available for your member group.',

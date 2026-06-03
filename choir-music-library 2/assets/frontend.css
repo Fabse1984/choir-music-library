@@ -1,6 +1,5 @@
 .cml-piece,
-.cml-overview,
-.cml-submission {
+.cml-overview {
     color: #1d2327;
     font-size: 16px;
     line-height: 1.55;
@@ -12,19 +11,6 @@
     padding-bottom: 22px;
 }
 
-.cml-back-link {
-    color: #0f6f70;
-    display: inline-block;
-    font-weight: 700;
-    margin-bottom: 18px;
-    text-decoration: none;
-}
-
-.cml-back-link:hover,
-.cml-back-link:focus {
-    text-decoration: underline;
-}
-
 .cml-piece-header h1 {
     font-size: clamp(2rem, 4vw, 3.4rem);
     line-height: 1.05;
@@ -34,7 +20,7 @@
 .cml-facts {
     display: grid;
     gap: 14px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     margin: 0;
 }
 
@@ -91,39 +77,11 @@
     margin: 28px 0;
 }
 
-.cml-purchase-panel {
-    background: #f7fafb;
-    border: 1px solid #dce2e8;
-    border-radius: 8px;
-    margin: 28px 0;
-    padding: 18px;
-}
-
-.cml-purchase-panel h2 {
-    font-size: 1.35rem;
-    margin: 0 0 8px;
-}
-
-.cml-purchase-panel p {
-    margin: 0 0 14px;
-}
-
-.cml-purchase-shortcode {
-    margin-top: 12px;
-}
-
 .cml-file-section h2 {
     border-bottom: 1px solid #e1e5ea;
     font-size: 1.4rem;
     margin: 0 0 12px;
     padding-bottom: 8px;
-}
-
-.cml-plugin-credit {
-    color: #7b8793;
-    font-size: 0.78rem;
-    margin-top: 34px;
-    text-align: center;
 }
 
 .cml-file-items {
@@ -155,8 +113,7 @@
 .cml-download-link,
 .cml-overview-toolbar button,
 .cml-search-actions button,
-.cml-search-open,
-.cml-submit-button {
+.cml-search-open {
     align-items: center;
     background: #0f6f70;
     border: 1px solid #0f6f70;
@@ -169,96 +126,6 @@
     min-height: 40px;
     padding: 8px 14px;
     text-decoration: none;
-}
-
-.cml-submission-form {
-    display: grid;
-    gap: 18px;
-}
-
-.cml-submission-form h2 {
-    font-size: 1.7rem;
-    margin: 0;
-}
-
-.cml-submission-form fieldset {
-    border: 1px solid #dce2e8;
-    border-radius: 8px;
-    display: grid;
-    gap: 8px;
-    margin: 0;
-    padding: 14px;
-}
-
-.cml-submission-form legend {
-    font-weight: 700;
-    padding: 0 6px;
-}
-
-.cml-submission-grid {
-    display: grid;
-    gap: 16px;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.cml-submission .cml-field {
-    margin: 0;
-}
-
-.cml-submission .cml-field label,
-.cml-upload-group label {
-    display: block;
-    font-weight: 700;
-    margin-bottom: 6px;
-}
-
-.cml-submission input[type="text"],
-.cml-submission select,
-.cml-submission textarea,
-.cml-upload-group input[type="file"] {
-    border: 1px solid #cbd4dc;
-    border-radius: 6px;
-    box-sizing: border-box;
-    max-width: 100%;
-    padding: 8px 10px;
-    width: 100%;
-}
-
-.cml-upload-group {
-    border: 1px solid #dce2e8;
-    border-radius: 8px;
-    display: grid;
-    gap: 10px;
-    padding: 14px;
-}
-
-.cml-field-extra_info,
-.cml-field-singing_info {
-    grid-column: 1 / -1;
-}
-
-.cml-submission-note {
-    color: #5d6876;
-    margin: 0;
-}
-
-.cml-notice {
-    border-radius: 8px;
-    font-weight: 700;
-    margin-bottom: 18px;
-    padding: 12px 14px;
-}
-
-.cml-notice-success {
-    background: #edf8f1;
-    border: 1px solid #b9dfc7;
-    color: #1d5d34;
-}
-
-.cml-notice-error {
-    background: #fff3f1;
-    border: 1px solid #f0b8b0;
-    color: #8a2d23;
 }
 
 .cml-search-toolbar-actions {

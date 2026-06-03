@@ -4,9 +4,10 @@ WordPress-Plugin fuer einen geschuetzten Chor-Notenbereich.
 
 ## Installation
 
-1. Den Ordner `choir-music-library` nach `wp-content/plugins/` kopieren.
-2. Im WordPress-Backend das Plugin "Choir Music Library" aktivieren.
-3. Unter "Chor-Noten" Musikstuecke anlegen.
+1. Unter 'Code', Download as .zip auswählen.
+2. Plugin bei WordPress hochladen.
+3. Im WordPress-Backend das Plugin "Choir Music Library" aktivieren.
+4. Unter "Chor-Noten" Musikstuecke anlegen.
 
 ## Inhalte
 
@@ -30,6 +31,12 @@ Das Plugin liest die Membership-Level aus WP Simple Membership / Simple Membersh
 
 Datei- und Audio-Links werden ueber eine geschuetzte WordPress-Route ausgeliefert und pruefen vor der Auslieferung den Zugriff auf das Musikstueck.
 
+## Einreichungen durch Mitglieder
+
+Unter `Chor-Noten > Einstellungen` kann festgelegt werden, welche Simple-Membership-Level Musik einreichen duerfen. Mitglieder dieser Level koennen neue Musikstuecke sowie Dateien oder Aenderungen zu bestehenden Musikstuecken einreichen.
+
+Alle Einreichungen werden zunaechst als wartende Pruefung gespeichert. Administratoren finden sie unter `Chor-Noten > Einreichungen` und koennen sie freigeben oder ablehnen. Erst nach der Freigabe wird ein neues Musikstueck veroeffentlicht oder ein bestehendes Musikstueck aktualisiert.
+
 ## Frontend
 
 Uebersichtsseite:
@@ -42,6 +49,12 @@ Einzelnes Musikstueck auf einer beliebigen Seite:
 
 ```text
 [chor_musikstueck id="123"]
+```
+
+Einreichungsformular fuer berechtigte Mitglieder:
+
+```text
+[chor_musik_einreichen]
 ```
 
 Musikstuecke sind ausserdem unter dem Custom-Post-Type-Archiv und den Einzelansichten verfuegbar.
