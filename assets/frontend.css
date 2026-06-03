@@ -1,0 +1,465 @@
+.cml-piece,
+.cml-overview,
+.cml-submission {
+    color: #1d2327;
+    font-size: 16px;
+    line-height: 1.55;
+}
+
+.cml-piece-header {
+    border-bottom: 1px solid #d8dce2;
+    margin-bottom: 28px;
+    padding-bottom: 22px;
+}
+
+.cml-back-link {
+    color: #0f6f70;
+    display: inline-block;
+    font-weight: 700;
+    margin-bottom: 18px;
+    text-decoration: none;
+}
+
+.cml-back-link:hover,
+.cml-back-link:focus {
+    text-decoration: underline;
+}
+
+.cml-piece-header h1 {
+    font-size: clamp(2rem, 4vw, 3.4rem);
+    line-height: 1.05;
+    margin: 0 0 20px;
+}
+
+.cml-facts {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0;
+}
+
+.cml-facts div {
+    min-width: 0;
+}
+
+.cml-fact-full {
+    grid-column: 1 / -1;
+}
+
+.cml-facts dt {
+    color: #5d6876;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+}
+
+.cml-facts dd {
+    margin: 0;
+}
+
+.cml-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 16px;
+}
+
+.cml-tags span,
+.cml-tag-filter {
+    background: #eef2f5;
+    border: 1px solid #d9e0e6;
+    border-radius: 999px;
+    color: #2f3a45;
+    cursor: default;
+    font-size: 0.88rem;
+    padding: 3px 10px;
+}
+
+.cml-tag-filter {
+    cursor: pointer;
+    font: inherit;
+}
+
+.cml-tag-filter:hover,
+.cml-tag-filter:focus {
+    background: #dfe8ee;
+    border-color: #b8c7d3;
+}
+
+.cml-file-section {
+    margin: 28px 0;
+}
+
+.cml-purchase-panel {
+    background: #f7fafb;
+    border: 1px solid #dce2e8;
+    border-radius: 8px;
+    margin: 28px 0;
+    padding: 18px;
+}
+
+.cml-purchase-panel h2 {
+    font-size: 1.35rem;
+    margin: 0 0 8px;
+}
+
+.cml-purchase-panel p {
+    margin: 0 0 14px;
+}
+
+.cml-purchase-shortcode {
+    margin-top: 12px;
+}
+
+.cml-file-section h2 {
+    border-bottom: 1px solid #e1e5ea;
+    font-size: 1.4rem;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+}
+
+.cml-plugin-credit {
+    color: #7b8793;
+    font-size: 0.78rem;
+    margin-top: 34px;
+    text-align: center;
+}
+
+.cml-file-items {
+    display: grid;
+    gap: 10px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.cml-file-item {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #dce2e8;
+    border-radius: 8px;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 12px;
+}
+
+.cml-file-item audio {
+    display: block;
+    margin-top: 8px;
+    max-width: 520px;
+    width: 100%;
+}
+
+.cml-download-link,
+.cml-overview-toolbar button,
+.cml-search-actions button,
+.cml-search-open,
+.cml-submit-button {
+    align-items: center;
+    background: #0f6f70;
+    border: 1px solid #0f6f70;
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    display: inline-flex;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 40px;
+    padding: 8px 14px;
+    text-decoration: none;
+}
+
+.cml-submission-form {
+    display: grid;
+    gap: 18px;
+}
+
+.cml-submission-form h2 {
+    font-size: 1.7rem;
+    margin: 0;
+}
+
+.cml-submission-form fieldset {
+    border: 1px solid #dce2e8;
+    border-radius: 8px;
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 14px;
+}
+
+.cml-submission-form legend {
+    font-weight: 700;
+    padding: 0 6px;
+}
+
+.cml-submission-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.cml-submission .cml-field {
+    margin: 0;
+}
+
+.cml-submission .cml-field label,
+.cml-upload-group label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.cml-submission input[type="text"],
+.cml-submission select,
+.cml-submission textarea,
+.cml-upload-group input[type="file"] {
+    border: 1px solid #cbd4dc;
+    border-radius: 6px;
+    box-sizing: border-box;
+    max-width: 100%;
+    padding: 8px 10px;
+    width: 100%;
+}
+
+.cml-upload-group {
+    border: 1px solid #dce2e8;
+    border-radius: 8px;
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+}
+
+.cml-field-extra_info,
+.cml-field-singing_info {
+    grid-column: 1 / -1;
+}
+
+.cml-submission-note {
+    color: #5d6876;
+    margin: 0;
+}
+
+.cml-notice {
+    border-radius: 8px;
+    font-weight: 700;
+    margin-bottom: 18px;
+    padding: 12px 14px;
+}
+
+.cml-notice-success {
+    background: #edf8f1;
+    border: 1px solid #b9dfc7;
+    color: #1d5d34;
+}
+
+.cml-notice-error {
+    background: #fff3f1;
+    border: 1px solid #f0b8b0;
+    color: #8a2d23;
+}
+
+.cml-search-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.cml-search-reset {
+    background: #fff;
+    color: #26323d;
+}
+
+.cml-overview-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 18px;
+}
+
+.cml-view-switch {
+    border: 1px solid #cbd4dc;
+    border-radius: 8px;
+    display: inline-flex;
+    overflow: hidden;
+}
+
+.cml-view-switch button {
+    background: #fff;
+    border: 0;
+    border-radius: 0;
+    color: #26323d;
+}
+
+.cml-view-switch button.is-active {
+    background: #0f6f70;
+    color: #fff;
+}
+
+.cml-piece-collection.is-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.cml-piece-collection.is-list {
+    display: grid;
+    gap: 10px;
+}
+
+.cml-overview-item {
+    background: #fff;
+    border: 1px solid #dce2e8;
+    border-radius: 8px;
+}
+
+.cml-overview-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+}
+
+.cml-piece-collection.is-list .cml-overview-row {
+    align-items: center;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: minmax(160px, 1.4fr) minmax(120px, 1fr) minmax(120px, auto);
+}
+
+.cml-overview-item a {
+    color: #0f6f70;
+    text-decoration: none;
+}
+
+.cml-overview-item h3 {
+    font-size: 1.15rem;
+    margin: 0;
+}
+
+.cml-overview-item p {
+    color: #5d6876;
+    margin: 0;
+}
+
+.cml-overview-item .cml-tags {
+    align-self: flex-end;
+    justify-content: flex-end;
+    margin-top: 0;
+    text-align: right;
+    width: 100%;
+}
+
+.cml-overview-item .cml-tag-filter {
+    font-size: 0.78rem;
+    line-height: 1.2;
+    padding: 2px 8px;
+}
+
+.cml-search-overlay {
+    align-items: center;
+    background: rgba(15, 23, 32, 0.62);
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    left: 0;
+    padding: 20px;
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 99999;
+}
+
+.cml-search-overlay[hidden] {
+    display: none;
+}
+
+.cml-search-panel {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 20px 70px rgba(0, 0, 0, 0.26);
+    max-width: 520px;
+    padding: 24px;
+    position: relative;
+    width: 100%;
+}
+
+.cml-search-panel h2 {
+    margin: 0 0 16px;
+}
+
+.cml-search-panel label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.cml-search-panel input {
+    border: 1px solid #cbd4dc;
+    border-radius: 6px;
+    display: block;
+    font: inherit;
+    margin-top: 5px;
+    min-height: 42px;
+    padding: 8px 10px;
+    width: 100%;
+}
+
+.cml-search-close {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font-size: 30px;
+    line-height: 1;
+    position: absolute;
+    right: 14px;
+    top: 10px;
+}
+
+.cml-search-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 18px;
+}
+
+.cml-search-actions button:first-child {
+    background: #fff;
+    color: #26323d;
+}
+
+.cml-access-denied {
+    background: #fff6e5;
+    border: 1px solid #f1c46d;
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+
+@media (max-width: 640px) {
+    .cml-facts {
+        grid-template-columns: 1fr;
+    }
+
+    .cml-piece-collection.is-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .cml-piece-collection.is-list .cml-overview-row {
+        align-items: stretch;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .cml-file-item {
+        grid-template-columns: 1fr;
+    }
+
+    .cml-download-link {
+        width: 100%;
+    }
+}
