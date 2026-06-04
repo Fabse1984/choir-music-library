@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Choir Music Library
  * Description: Geschuetzter Notenbereich fuer Chor-Webseiten mit Noten, Hoerbeispielen, Aussprachehilfen und Zusatzdateien.
- * Version: 1.2.10
+ * Version: 1.2.11
  * Author: Codex
  * Text Domain: choir-music-library
  */
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 }
 
 final class CML_Choir_Music_Library {
-    const VERSION = '1.2.10';
+    const VERSION = '1.2.11';
     const POST_TYPE = 'cml_piece';
     const SUBMISSION_POST_TYPE = 'cml_submission';
     const TAG_TAX = 'cml_piece_tag';
@@ -1231,7 +1231,7 @@ final class CML_Choir_Music_Library {
 
     private function render_plugin_credit() {
         ?>
-        <footer class="cml-plugin-credit">Choir Music Library - Fabian Kaltenecker</footer>
+        <footer class="cml-plugin-credit">Choir Music Library - Fabian Kaltenecker - Version <?php echo esc_html(self::VERSION); ?></footer>
         <?php
     }
 

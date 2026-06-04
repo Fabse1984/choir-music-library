@@ -337,6 +337,10 @@
     grid-template-columns: minmax(160px, 1.4fr) minmax(120px, 1fr) minmax(120px, auto);
 }
 
+.cml-piece-collection.is-list .cml-overview-row > * {
+    align-self: center;
+}
+
 .cml-overview-item a {
     color: #0f6f70;
     text-decoration: none;
@@ -352,8 +356,15 @@
     margin: 0;
 }
 
-.cml-overview-item .cml-tags {
+.cml-piece-collection.is-grid .cml-overview-item .cml-tags {
     align-self: flex-end;
+    justify-content: flex-end;
+    margin-top: 0;
+    text-align: right;
+    width: 100%;
+}
+
+.cml-piece-collection.is-list .cml-overview-item .cml-tags {
     justify-content: flex-end;
     margin-top: 0;
     text-align: right;
