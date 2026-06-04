@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Choir Music Library
  * Description: Geschuetzter Notenbereich fuer Chor-Webseiten mit Noten, Hoerbeispielen, Aussprachehilfen und Zusatzdateien.
- * Version: 1.2.9
+ * Version: 1.2.10
  * Author: Codex
  * Text Domain: choir-music-library
  */
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 }
 
 final class CML_Choir_Music_Library {
-    const VERSION = '1.2.9';
+    const VERSION = '1.2.10';
     const POST_TYPE = 'cml_piece';
     const SUBMISSION_POST_TYPE = 'cml_submission';
     const TAG_TAX = 'cml_piece_tag';
@@ -466,6 +466,11 @@ final class CML_Choir_Music_Library {
         </p>
         <p class="description"><?php echo esc_html($this->text('purchase_product_key_hint')); ?></p>
         <p>
+            <label for="cml_purchase_url"><strong><?php echo esc_html($this->text('purchase_url')); ?></strong></label>
+            <input id="cml_purchase_url" type="url" name="cml[purchase_url]" value="<?php echo esc_attr($data['purchase_url']); ?>" class="widefat" placeholder="https://">
+        </p>
+        <p class="description"><?php echo esc_html($this->text('purchase_url_hint')); ?></p>
+        <p>
             <label for="cml_purchase_shortcode"><strong><?php echo esc_html($this->text('purchase_shortcode')); ?></strong></label>
             <textarea id="cml_purchase_shortcode" name="cml[purchase_shortcode]" rows="5" class="widefat"><?php echo esc_textarea($data['purchase_shortcode']); ?></textarea>
         </p>
@@ -496,6 +501,7 @@ final class CML_Choir_Music_Library {
             'singing_info' => isset($raw['singing_info']) ? wp_kses_post($raw['singing_info']) : '',
             'purchase_required' => !empty($raw['purchase_required']) ? 1 : 0,
             'purchase_product_key' => isset($raw['purchase_product_key']) ? sanitize_text_field($raw['purchase_product_key']) : '',
+            'purchase_url' => isset($raw['purchase_url']) ? esc_url_raw($raw['purchase_url']) : '',
             'purchase_shortcode' => isset($raw['purchase_shortcode']) ? wp_kses_post($raw['purchase_shortcode']) : '',
             'allowed_levels' => $this->sanitize_scalar_list(isset($raw['allowed_levels']) ? $raw['allowed_levels'] : array()),
             'scores' => $this->sanitize_file_group($raw, 'scores'),
@@ -730,6 +736,7 @@ final class CML_Choir_Music_Library {
             'singing_info' => isset($raw['singing_info']) ? wp_kses_post($raw['singing_info']) : '',
             'purchase_required' => 0,
             'purchase_product_key' => '',
+            'purchase_url' => '',
             'purchase_shortcode' => '',
             'allowed_levels' => array(),
             'scores' => array(),
@@ -1204,12 +1211,19 @@ final class CML_Choir_Music_Library {
         <section class="cml-purchase-panel">
             <h2><?php echo esc_html($this->text('purchase_needed')); ?></h2>
             <p><?php echo esc_html($this->text('purchase_needed_hint')); ?></p>
+            <?php if (!empty($data['purchase_url'])) : ?>
+                <p>
+                    <a class="cml-purchase-link" href="<?php echo esc_url($data['purchase_url']); ?>">
+                        <?php echo esc_html($this->text('purchase_now')); ?>
+                    </a>
+                </p>
+            <?php endif; ?>
             <?php if (!empty($data['purchase_shortcode'])) : ?>
                 <div class="cml-purchase-shortcode">
                     <?php echo do_shortcode(wp_kses_post($data['purchase_shortcode'])); ?>
                 </div>
-            <?php else : ?>
-                <p><em><?php echo esc_html($this->text('purchase_missing_shortcode')); ?></em></p>
+            <?php elseif (empty($data['purchase_url'])) : ?>
+                <p><em><?php echo esc_html($this->text('purchase_missing_link')); ?></em></p>
             <?php endif; ?>
         </section>
         <?php
@@ -1851,6 +1865,7 @@ final class CML_Choir_Music_Library {
             'singing_info' => '',
             'purchase_required' => 0,
             'purchase_product_key' => '',
+            'purchase_url' => '',
             'purchase_shortcode' => '',
             'allowed_levels' => array(),
             'scores' => array(),
@@ -1985,11 +2000,14 @@ final class CML_Choir_Music_Library {
                 'purchase_required' => 'Downloads erst nach Zahlung freischalten',
                 'purchase_product_key' => 'Produkt-Schluessel',
                 'purchase_product_key_hint' => 'Produktname oder SKU aus WP Simple Shopping Cart. Dieser Wert muss im Kaufdatensatz vorkommen.',
+                'purchase_url' => 'Kauflink',
+                'purchase_url_hint' => 'Direkter Link zur Produkt-, Warenkorb- oder Checkout-Seite fuer dieses Musikstueck.',
                 'purchase_shortcode' => 'Kauf-Shortcode',
                 'purchase_shortcode_hint' => 'Hier den WP-Simple-Shopping-Cart-Shortcode fuer dieses Stueck einfuegen.',
                 'purchase_needed' => 'Zahlung erforderlich',
                 'purchase_needed_hint' => 'Die Downloads fuer dieses Musikstueck werden nach erfolgreicher Zahlung freigeschaltet.',
-                'purchase_missing_shortcode' => 'Fuer dieses Musikstueck ist noch kein Kauf-Shortcode hinterlegt.',
+                'purchase_now' => 'Jetzt kaufen',
+                'purchase_missing_link' => 'Fuer dieses Musikstueck ist noch kein Kauflink oder Kauf-Shortcode hinterlegt.',
                 'pdf_library_missing' => 'Die PDF-Wasserzeichen-Bibliothek konnte nicht geladen werden.',
                 'pdf_watermark_failed' => 'Das PDF-Wasserzeichen konnte nicht erzeugt werden.',
             ),
@@ -2075,11 +2093,14 @@ final class CML_Choir_Music_Library {
                 'purchase_required' => 'Unlock downloads only after payment',
                 'purchase_product_key' => 'Product Key',
                 'purchase_product_key_hint' => 'Product name or SKU from WP Simple Shopping Cart. This value must appear in the purchase data.',
+                'purchase_url' => 'Purchase Link',
+                'purchase_url_hint' => 'Direct link to the product, cart, or checkout page for this music piece.',
                 'purchase_shortcode' => 'Purchase Shortcode',
                 'purchase_shortcode_hint' => 'Paste the WP Simple Shopping Cart shortcode for this piece here.',
                 'purchase_needed' => 'Payment Required',
                 'purchase_needed_hint' => 'Downloads for this music piece will be unlocked after successful payment.',
-                'purchase_missing_shortcode' => 'No purchase shortcode has been configured for this music piece yet.',
+                'purchase_now' => 'Buy Now',
+                'purchase_missing_link' => 'No purchase link or purchase shortcode has been configured for this music piece yet.',
                 'pdf_library_missing' => 'The PDF watermark library could not be loaded.',
                 'pdf_watermark_failed' => 'The PDF watermark could not be created.',
             ),
