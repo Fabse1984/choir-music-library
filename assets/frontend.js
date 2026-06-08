@@ -155,8 +155,58 @@
         updateMode();
     }
 
+    function initPdfPreview() {
+        var overlay = document.createElement('div');
+        overlay.className = 'cml-pdf-overlay';
+        overlay.hidden = true;
+        overlay.innerHTML = [
+            '<div class="cml-pdf-dialog" role="dialog" aria-modal="true">',
+            '<div class="cml-pdf-toolbar">',
+            '<strong data-cml-pdf-title></strong>',
+            '<button type="button" data-cml-pdf-close aria-label="Schliessen">&times;</button>',
+            '</div>',
+            '<iframe title="PDF Vorschau" data-cml-pdf-frame></iframe>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(overlay);
+
+        var frame = overlay.querySelector('[data-cml-pdf-frame]');
+        var title = overlay.querySelector('[data-cml-pdf-title]');
+
+        function close() {
+            overlay.hidden = true;
+            frame.src = 'about:blank';
+        }
+
+        document.addEventListener('click', function (event) {
+            var trigger = event.target.closest('[data-cml-pdf-preview]');
+            if (!trigger) {
+                return;
+            }
+
+            title.textContent = trigger.dataset.cmlPdfTitle || '';
+            frame.src = trigger.dataset.cmlPdfPreview || 'about:blank';
+            overlay.hidden = false;
+        });
+
+        overlay.querySelector('[data-cml-pdf-close]').addEventListener('click', close);
+        overlay.addEventListener('click', function (event) {
+            if (event.target === overlay) {
+                close();
+            }
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !overlay.hidden) {
+                close();
+            }
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('[data-cml-overview]').forEach(initOverview);
         document.querySelectorAll('[data-cml-submission-form]').forEach(initSubmissionForm);
+        if (document.querySelector('[data-cml-pdf-preview]')) {
+            initPdfPreview();
+        }
     });
 })();

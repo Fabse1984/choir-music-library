@@ -111,3 +111,49 @@
     gap: 8px;
     margin-top: 16px;
 }
+
+.column-cml_piece_id,
+.column-cml_collection_id {
+    width: 72px;
+}
+
+.cml-collection-builder {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+    margin-top: 18px;
+}
+
+.cml-collection-piece-list {
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    min-height: 72px;
+    padding: 10px;
+}
+
+.cml-collection-piece-item {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #dcdcde;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    margin: 0 0 8px;
+    padding: 8px;
+}
+
+.cml-collection-piece-item .dashicons-menu {
+    color: #646970;
+    cursor: move;
+}
+
+.cml-collection-piece-item strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cml-collection-piece-id {
+    color: #646970;
+    font-size: 12px;
+}

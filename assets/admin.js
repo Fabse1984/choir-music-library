@@ -79,4 +79,85 @@
     $(document).on('click', '.cml-remove-file', function () {
         $(this).closest('.cml-file-row').remove();
     });
+
+    function selectedPieceHtml(id, title) {
+        return [
+            '<li class="cml-collection-piece-item" data-piece-id="' + escapeAttr(id) + '">',
+            '<span class="dashicons dashicons-menu" aria-hidden="true"></span>',
+            '<strong>' + escapeHtml(title) + '</strong>',
+            '<span class="cml-collection-piece-id">ID ' + escapeHtml(id) + '</span>',
+            '<input type="hidden" name="cml_collection[piece_ids][]" value="' + escapeAttr(id) + '">',
+            '<button type="button" class="button-link-delete cml-collection-remove-piece">' + escapeHtml(label('remove', 'Entfernen')) + '</button>',
+            '</li>'
+        ].join('');
+    }
+
+    function availablePieceHtml(id, title) {
+        return [
+            '<li class="cml-collection-piece-item" data-piece-id="' + escapeAttr(id) + '">',
+            '<span class="dashicons dashicons-menu" aria-hidden="true"></span>',
+            '<strong>' + escapeHtml(title) + '</strong>',
+            '<span class="cml-collection-piece-id">ID ' + escapeHtml(id) + '</span>',
+            '<button type="button" class="button cml-collection-add-piece">' + escapeHtml(label('add', 'Hinzufuegen')) + '</button>',
+            '</li>'
+        ].join('');
+    }
+
+    function normalizeCollectionBuilder($builder) {
+        $builder.find('[data-cml-selected-pieces] .cml-collection-piece-item').each(function () {
+            var $item = $(this);
+            var id = $item.data('piece-id');
+            if (!$item.find('input[name="cml_collection[piece_ids][]"]').length) {
+                $item.append('<input type="hidden" name="cml_collection[piece_ids][]" value="' + escapeAttr(id) + '">');
+            }
+            $item.find('.cml-collection-add-piece').remove();
+            if (!$item.find('.cml-collection-remove-piece').length) {
+                $item.append('<button type="button" class="button-link-delete cml-collection-remove-piece">' + escapeHtml(label('remove', 'Entfernen')) + '</button>');
+            }
+        });
+
+        $builder.find('.cml-collection-available .cml-collection-piece-item').each(function () {
+            var $item = $(this);
+            $item.find('input[name="cml_collection[piece_ids][]"]').remove();
+            $item.find('.cml-collection-remove-piece').remove();
+            if (!$item.find('.cml-collection-add-piece').length) {
+                $item.append('<button type="button" class="button cml-collection-add-piece">' + escapeHtml(label('add', 'Hinzufuegen')) + '</button>');
+            }
+        });
+    }
+
+    $('[data-cml-collection-builder]').each(function () {
+        var $builder = $(this);
+        $builder.find('.cml-collection-piece-list').sortable({
+            connectWith: '.cml-collection-piece-list',
+            handle: '.dashicons-menu',
+            items: '.cml-collection-piece-item',
+            update: function () {
+                normalizeCollectionBuilder($builder);
+            },
+            receive: function () {
+                normalizeCollectionBuilder($builder);
+            }
+        });
+    });
+
+    $(document).on('click', '.cml-collection-add-piece', function () {
+        var $item = $(this).closest('.cml-collection-piece-item');
+        var id = $item.data('piece-id');
+        var title = $item.find('strong').text();
+        var $builder = $item.closest('[data-cml-collection-builder]');
+        $builder.find('[data-cml-selected-pieces]').append(selectedPieceHtml(id, title));
+        $item.remove();
+        normalizeCollectionBuilder($builder);
+    });
+
+    $(document).on('click', '.cml-collection-remove-piece', function () {
+        var $item = $(this).closest('.cml-collection-piece-item');
+        var id = $item.data('piece-id');
+        var title = $item.find('strong').text();
+        var $builder = $item.closest('[data-cml-collection-builder]');
+        $builder.find('.cml-collection-available .cml-collection-piece-list').append(availablePieceHtml(id, title));
+        $item.remove();
+        normalizeCollectionBuilder($builder);
+    });
 })(jQuery);

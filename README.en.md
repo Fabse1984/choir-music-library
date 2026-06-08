@@ -57,6 +57,18 @@ Submission form for allowed members:
 [chor_musik_einreichen]
 ```
 
+Collection overview:
+
+```text
+[chor_sammlungen]
+```
+
+Single collection on any page:
+
+```text
+[chor_sammlung id="123"]
+```
+
 Music pieces are also available through the custom post type archive and single views.
 
 ## Language

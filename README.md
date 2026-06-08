@@ -57,6 +57,18 @@ Einreichungsformular fuer berechtigte Mitglieder:
 [chor_musik_einreichen]
 ```
 
+Sammlungsuebersicht:
+
+```text
+[chor_sammlungen]
+```
+
+Einzelne Sammlung auf einer beliebigen Seite:
+
+```text
+[chor_sammlung id="123"]
+```
+
 Musikstuecke sind ausserdem unter dem Custom-Post-Type-Archiv und den Einzelansichten verfuegbar.
 
 ## Sprache

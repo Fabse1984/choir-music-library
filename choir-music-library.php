@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Choir Music Library
  * Description: Geschuetzter Notenbereich fuer Chor-Webseiten mit Noten, Hoerbeispielen, Aussprachehilfen und Zusatzdateien.
- * Version: 1.2.14
- * Author: Codex
+ * Version: 1.3.2
+ * Author: Fabian Kaltenecker
  * Text Domain: choir-music-library
  */
 
@@ -12,11 +12,13 @@ if (!defined('ABSPATH')) {
 }
 
 final class CML_Choir_Music_Library {
-    const VERSION = '1.2.14';
+    const VERSION = '1.3.2';
     const POST_TYPE = 'cml_piece';
+    const COLLECTION_POST_TYPE = 'cml_collection';
     const SUBMISSION_POST_TYPE = 'cml_submission';
     const TAG_TAX = 'cml_piece_tag';
     const META_KEY = '_cml_piece_data';
+    const COLLECTION_META_KEY = '_cml_collection_data';
     const SUBMISSION_META_KEY = '_cml_submission_data';
     const OPTION_LANGUAGE = 'cml_language';
     const OPTION_SUBMISSION_LEVELS = 'cml_submission_levels';
@@ -39,10 +41,12 @@ final class CML_Choir_Music_Library {
 
     private function __construct() {
         add_action('init', array($this, 'register_post_type'));
+        add_action('init', array($this, 'register_collection_post_type'));
         add_action('init', array($this, 'register_submission_post_type'));
         add_action('init', array($this, 'register_taxonomy'));
         add_action('add_meta_boxes', array($this, 'add_meta_boxes'));
         add_action('save_post_' . self::POST_TYPE, array($this, 'save_piece'), 10, 2);
+        add_action('save_post_' . self::COLLECTION_POST_TYPE, array($this, 'save_collection'), 10, 2);
         add_action('admin_menu', array($this, 'add_settings_page'));
         add_action('admin_init', array($this, 'register_settings'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
@@ -60,7 +64,13 @@ final class CML_Choir_Music_Library {
         add_filter('the_content', array($this, 'render_single_content'));
         add_shortcode('chor_noten_uebersicht', array($this, 'overview_shortcode'));
         add_shortcode('chor_musikstueck', array($this, 'piece_shortcode'));
+        add_shortcode('chor_sammlungen', array($this, 'collections_shortcode'));
+        add_shortcode('chor_sammlung', array($this, 'collection_shortcode'));
         add_shortcode('chor_musik_einreichen', array($this, 'submission_shortcode'));
+        add_filter('manage_' . self::POST_TYPE . '_posts_columns', array($this, 'add_piece_admin_columns'));
+        add_action('manage_' . self::POST_TYPE . '_posts_custom_column', array($this, 'render_piece_admin_column'), 10, 2);
+        add_filter('manage_' . self::COLLECTION_POST_TYPE . '_posts_columns', array($this, 'add_collection_admin_columns'));
+        add_action('manage_' . self::COLLECTION_POST_TYPE . '_posts_custom_column', array($this, 'render_collection_admin_column'), 10, 2);
     }
 
     public function register_post_type() {
@@ -81,6 +91,64 @@ final class CML_Choir_Music_Library {
             'rewrite' => array('slug' => 'musikstuecke'),
             'show_in_rest' => true,
         ));
+    }
+
+    public function register_collection_post_type() {
+        register_post_type(self::COLLECTION_POST_TYPE, array(
+            'labels' => array(
+                'name' => $this->text('collections'),
+                'singular_name' => $this->text('collection'),
+                'add_new_item' => $this->text('add_collection'),
+                'edit_item' => $this->text('edit_collection'),
+                'menu_name' => $this->text('collections'),
+            ),
+            'public' => true,
+            'publicly_queryable' => true,
+            'show_in_menu' => 'edit.php?post_type=' . self::POST_TYPE,
+            'menu_icon' => 'dashicons-category',
+            'supports' => array('title'),
+            'has_archive' => true,
+            'rewrite' => array('slug' => 'chor-sammlungen'),
+            'show_in_rest' => true,
+        ));
+    }
+
+    public function add_piece_admin_columns($columns) {
+        $new_columns = array();
+
+        foreach ($columns as $key => $label) {
+            if ('title' === $key) {
+                $new_columns['cml_piece_id'] = $this->text('piece_id');
+            }
+            $new_columns[$key] = $label;
+        }
+
+        return $new_columns;
+    }
+
+    public function render_piece_admin_column($column, $post_id) {
+        if ('cml_piece_id' === $column) {
+            echo esc_html(absint($post_id));
+        }
+    }
+
+    public function add_collection_admin_columns($columns) {
+        $new_columns = array();
+
+        foreach ($columns as $key => $label) {
+            if ('title' === $key) {
+                $new_columns['cml_collection_id'] = $this->text('collection_id');
+            }
+            $new_columns[$key] = $label;
+        }
+
+        return $new_columns;
+    }
+
+    public function render_collection_admin_column($column, $post_id) {
+        if ('cml_collection_id' === $column) {
+            echo esc_html(absint($post_id));
+        }
     }
 
     public function register_submission_post_type() {
@@ -136,12 +204,30 @@ final class CML_Choir_Music_Library {
             'side',
             'default'
         );
+
+        add_meta_box(
+            'cml_collection_details',
+            $this->text('collection_information'),
+            array($this, 'render_collection_details_meta_box'),
+            self::COLLECTION_POST_TYPE,
+            'normal',
+            'high'
+        );
+
+        add_meta_box(
+            'cml_collection_access',
+            $this->text('visibility_groups'),
+            array($this, 'render_collection_access_meta_box'),
+            self::COLLECTION_POST_TYPE,
+            'side',
+            'default'
+        );
     }
 
     public function enqueue_admin_assets($hook) {
         global $post_type;
 
-        $is_cml_page = self::POST_TYPE === $post_type || false !== strpos((string) $hook, 'cml-submissions') || false !== strpos((string) $hook, 'cml-settings');
+        $is_cml_page = in_array($post_type, array(self::POST_TYPE, self::COLLECTION_POST_TYPE), true) || false !== strpos((string) $hook, 'cml-submissions') || false !== strpos((string) $hook, 'cml-settings');
         if (!$is_cml_page) {
             return;
         }
@@ -150,12 +236,13 @@ final class CML_Choir_Music_Library {
             wp_enqueue_media();
         }
         wp_enqueue_style('cml-admin', plugins_url('assets/admin.css', __FILE__), array(), self::VERSION);
-        wp_enqueue_script('cml-admin', plugins_url('assets/admin.js', __FILE__), array('jquery'), self::VERSION, true);
+        wp_enqueue_script('cml-admin', plugins_url('assets/admin.js', __FILE__), array('jquery', 'jquery-ui-sortable'), self::VERSION, true);
         wp_localize_script('cml-admin', 'cmlAdminLabels', array(
             'chooseFile' => $this->text('choose_file'),
             'useFile' => $this->text('use_file'),
             'change' => $this->text('change'),
             'remove' => $this->text('remove'),
+            'add' => $this->text('add'),
         ));
     }
 
@@ -316,7 +403,7 @@ final class CML_Choir_Music_Library {
         wp_register_style('cml-frontend', plugins_url('assets/frontend.css', __FILE__), array(), self::VERSION);
         wp_register_script('cml-frontend', plugins_url('assets/frontend.js', __FILE__), array(), self::VERSION, true);
 
-        if (is_singular(self::POST_TYPE) || $this->current_post_has_shortcode('chor_noten_uebersicht') || $this->current_post_has_shortcode('chor_musikstueck') || $this->current_post_has_shortcode('chor_musik_einreichen')) {
+        if (is_singular(self::POST_TYPE) || is_singular(self::COLLECTION_POST_TYPE) || $this->current_post_has_shortcode('chor_noten_uebersicht') || $this->current_post_has_shortcode('chor_musikstueck') || $this->current_post_has_shortcode('chor_sammlungen') || $this->current_post_has_shortcode('chor_sammlung') || $this->current_post_has_shortcode('chor_musik_einreichen')) {
             wp_enqueue_style('cml-frontend');
             wp_enqueue_script('cml-frontend');
         }
@@ -329,8 +416,9 @@ final class CML_Choir_Music_Library {
 
         $post_type = $query->get('post_type');
         $targets_piece = self::POST_TYPE === $post_type || (is_array($post_type) && in_array(self::POST_TYPE, $post_type, true)) || $query->is_post_type_archive(self::POST_TYPE);
+        $targets_collection = self::COLLECTION_POST_TYPE === $post_type || (is_array($post_type) && in_array(self::COLLECTION_POST_TYPE, $post_type, true)) || $query->is_post_type_archive(self::COLLECTION_POST_TYPE);
 
-        if (!$targets_piece) {
+        if (!$targets_piece && !$targets_collection) {
             return;
         }
 
@@ -352,16 +440,16 @@ final class CML_Choir_Music_Library {
         $existing_meta_query[] = array(
             'relation' => 'OR',
             array(
-                'key' => self::META_KEY,
+                'key' => $targets_collection ? self::COLLECTION_META_KEY : self::META_KEY,
                 'compare' => 'NOT EXISTS',
             ),
             array(
-                'key' => self::META_KEY,
+                'key' => $targets_collection ? self::COLLECTION_META_KEY : self::META_KEY,
                 'value' => 's:14:"allowed_levels";a:0:{}',
                 'compare' => 'LIKE',
             ),
             array(
-                'key' => self::META_KEY,
+                'key' => $targets_collection ? self::COLLECTION_META_KEY : self::META_KEY,
                 'value' => '"' . $level . '"',
                 'compare' => 'LIKE',
             ),
@@ -478,6 +566,89 @@ final class CML_Choir_Music_Library {
         <?php
     }
 
+    public function render_collection_details_meta_box($post) {
+        wp_nonce_field('cml_save_collection', 'cml_collection_nonce');
+        $data = $this->get_collection_data($post->ID);
+        $selected_ids = array_map('absint', $data['piece_ids']);
+        $all_pieces = get_posts(array(
+            'post_type' => self::POST_TYPE,
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'orderby' => 'title',
+            'order' => 'ASC',
+        ));
+        usort($all_pieces, array($this, 'sort_pieces_by_title'));
+        $pieces_by_id = array();
+        foreach ($all_pieces as $piece) {
+            $pieces_by_id[$piece->ID] = $piece;
+        }
+        ?>
+        <p class="cml-field cml-field-extra_info">
+            <label for="cml_collection_info"><?php echo esc_html($this->text('collection_info')); ?></label>
+            <textarea id="cml_collection_info" name="cml_collection[info]" rows="5"><?php echo esc_textarea($data['info']); ?></textarea>
+        </p>
+
+        <div class="cml-collection-builder" data-cml-collection-builder>
+            <div class="cml-collection-selected">
+                <h3><?php echo esc_html($this->text('collection_selected_pieces')); ?></h3>
+                <p class="description"><?php echo esc_html($this->text('collection_drag_hint')); ?></p>
+                <ul class="cml-collection-piece-list" data-cml-selected-pieces>
+                    <?php foreach ($selected_ids as $piece_id) : ?>
+                        <?php if (empty($pieces_by_id[$piece_id])) {
+                            continue;
+                        } ?>
+                        <?php $this->render_collection_piece_admin_item($pieces_by_id[$piece_id], true); ?>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+            <div class="cml-collection-available">
+                <h3><?php echo esc_html($this->text('collection_available_pieces')); ?></h3>
+                <ul class="cml-collection-piece-list">
+                    <?php foreach ($all_pieces as $piece) : ?>
+                        <?php if (in_array((int) $piece->ID, $selected_ids, true)) {
+                            continue;
+                        } ?>
+                        <?php $this->render_collection_piece_admin_item($piece, false); ?>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        </div>
+        <?php
+    }
+
+    private function render_collection_piece_admin_item($piece, $selected) {
+        ?>
+        <li class="cml-collection-piece-item" data-piece-id="<?php echo esc_attr($piece->ID); ?>">
+            <span class="dashicons dashicons-menu" aria-hidden="true"></span>
+            <strong><?php echo esc_html(get_the_title($piece)); ?></strong>
+            <span class="cml-collection-piece-id">ID <?php echo esc_html($piece->ID); ?></span>
+            <?php if ($selected) : ?>
+                <input type="hidden" name="cml_collection[piece_ids][]" value="<?php echo esc_attr($piece->ID); ?>">
+                <button type="button" class="button-link-delete cml-collection-remove-piece"><?php echo esc_html($this->text('remove')); ?></button>
+            <?php else : ?>
+                <button type="button" class="button cml-collection-add-piece"><?php echo esc_html($this->text('add')); ?></button>
+            <?php endif; ?>
+        </li>
+        <?php
+    }
+
+    public function render_collection_access_meta_box($post) {
+        $data = $this->get_collection_data($post->ID);
+        $levels = $this->get_membership_levels();
+        ?>
+        <p><?php echo esc_html($this->text('collection_visibility_hint')); ?></p>
+        <?php if (empty($levels)) : ?>
+            <p><em><?php echo esc_html($this->text('no_levels')); ?></em></p>
+        <?php endif; ?>
+        <?php foreach ($levels as $level_id => $level_name) : ?>
+            <label class="cml-access-option">
+                <input type="checkbox" name="cml_collection[allowed_levels][]" value="<?php echo esc_attr($level_id); ?>" <?php checked(in_array((string) $level_id, $data['allowed_levels'], true)); ?>>
+                <?php echo esc_html($level_name); ?>
+            </label>
+        <?php endforeach; ?>
+        <?php
+    }
+
     public function save_piece($post_id, $post) {
         if (!isset($_POST['cml_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['cml_nonce'])), 'cml_save_piece')) {
             return;
@@ -511,6 +682,32 @@ final class CML_Choir_Music_Library {
         );
 
         update_post_meta($post_id, self::META_KEY, $data);
+    }
+
+    public function save_collection($post_id, $post) {
+        if (!isset($_POST['cml_collection_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['cml_collection_nonce'])), 'cml_save_collection')) {
+            return;
+        }
+
+        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+            return;
+        }
+
+        if (!current_user_can('edit_post', $post_id)) {
+            return;
+        }
+
+        $raw = isset($_POST['cml_collection']) && is_array($_POST['cml_collection']) ? wp_unslash($_POST['cml_collection']) : array();
+        $piece_ids = isset($raw['piece_ids']) && is_array($raw['piece_ids']) ? array_map('absint', $raw['piece_ids']) : array();
+        $piece_ids = array_values(array_unique(array_filter($piece_ids, function($piece_id) {
+            return self::POST_TYPE === get_post_type($piece_id);
+        })));
+
+        update_post_meta($post_id, self::COLLECTION_META_KEY, array(
+            'info' => isset($raw['info']) ? wp_kses_post($raw['info']) : '',
+            'allowed_levels' => $this->sanitize_scalar_list(isset($raw['allowed_levels']) ? $raw['allowed_levels'] : array()),
+            'piece_ids' => $piece_ids,
+        ));
     }
 
     public function handle_piece_submission() {
@@ -914,11 +1111,19 @@ final class CML_Choir_Music_Library {
     }
 
     public function render_single_content($content) {
-        if (!is_singular(self::POST_TYPE) || !in_the_loop() || !is_main_query()) {
+        if (!in_the_loop() || !is_main_query()) {
             return $content;
         }
 
-        return $this->render_piece(get_the_ID(), false);
+        if (is_singular(self::POST_TYPE)) {
+            return $this->render_piece(get_the_ID(), false);
+        }
+
+        if (is_singular(self::COLLECTION_POST_TYPE)) {
+            return $this->render_collection(get_the_ID(), false);
+        }
+
+        return $content;
     }
 
     public function piece_shortcode($atts) {
@@ -1077,8 +1282,8 @@ final class CML_Choir_Music_Library {
         <section class="cml-overview" data-cml-overview>
             <div class="cml-overview-toolbar">
                 <div class="cml-view-switch" role="group" aria-label="<?php echo esc_attr($this->text('switch_view')); ?>">
-                    <button type="button" class="is-active" data-cml-view="grid"><?php echo esc_html($this->text('tiles')); ?></button>
-                    <button type="button" data-cml-view="list"><?php echo esc_html($this->text('list')); ?></button>
+                    <button type="button" data-cml-view="grid"><?php echo esc_html($this->text('tiles')); ?></button>
+                    <button type="button" class="is-active" data-cml-view="list"><?php echo esc_html($this->text('list')); ?></button>
                 </div>
                 <div class="cml-search-toolbar-actions">
                     <button type="button" class="cml-search-open" data-cml-search-open><?php echo esc_html($this->text('search')); ?></button>
@@ -1086,7 +1291,7 @@ final class CML_Choir_Music_Library {
                 </div>
             </div>
 
-            <div class="cml-piece-collection is-grid" data-cml-collection>
+            <div class="cml-piece-collection is-list" data-cml-collection>
                 <?php foreach ($pieces as $piece) : ?>
                     <?php if (!$this->current_user_can_access_piece($piece->ID)) {
                         continue;
@@ -1124,13 +1329,66 @@ final class CML_Choir_Music_Library {
         return ob_get_clean();
     }
 
-    private function render_overview_item($piece) {
+    public function collections_shortcode($atts) {
+        wp_enqueue_style('cml-frontend');
+        wp_enqueue_script('cml-frontend');
+
+        $collections = get_posts(array(
+            'post_type' => self::COLLECTION_POST_TYPE,
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'orderby' => 'title',
+            'order' => 'ASC',
+        ));
+
+        ob_start();
+        ?>
+        <section class="cml-overview cml-collection-overview" data-cml-overview>
+            <div class="cml-overview-toolbar">
+                <div class="cml-view-switch" role="group" aria-label="<?php echo esc_attr($this->text('switch_view')); ?>">
+                    <button type="button" data-cml-view="grid"><?php echo esc_html($this->text('tiles')); ?></button>
+                    <button type="button" class="is-active" data-cml-view="list"><?php echo esc_html($this->text('list')); ?></button>
+                </div>
+            </div>
+            <div class="cml-piece-collection is-list" data-cml-collection>
+                <?php foreach ($collections as $collection) : ?>
+                    <?php if (!$this->current_user_can_access_collection($collection->ID)) {
+                        continue;
+                    } ?>
+                    <?php $data = $this->get_collection_data($collection->ID); ?>
+                    <article class="cml-overview-item">
+                        <div class="cml-overview-row">
+                            <h3><a href="<?php echo esc_url(get_permalink($collection)); ?>"><?php echo esc_html(get_the_title($collection)); ?></a></h3>
+                            <?php if ($data['info']) : ?>
+                                <p><?php echo esc_html(wp_trim_words(wp_strip_all_tags($data['info']), 24)); ?></p>
+                            <?php endif; ?>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+            <?php $this->render_plugin_credit(); ?>
+        </section>
+        <?php
+
+        return ob_get_clean();
+    }
+
+    public function collection_shortcode($atts) {
+        $atts = shortcode_atts(array('id' => get_the_ID()), $atts, 'chor_sammlung');
+        return $this->render_collection(absint($atts['id']));
+    }
+
+    private function render_overview_item($piece, $collection_id = 0) {
         $data = $this->get_piece_data($piece->ID);
         $tags = wp_get_post_terms($piece->ID, self::TAG_TAX, array('fields' => 'names'));
+        $piece_url = get_permalink($piece);
+        if ($collection_id) {
+            $piece_url = add_query_arg('cml_from_collection', absint($collection_id), $piece_url);
+        }
         ?>
         <article class="cml-overview-item" data-title="<?php echo esc_attr(strtolower($piece->post_title)); ?>" data-composer="<?php echo esc_attr(strtolower($data['composer'])); ?>" data-tags="<?php echo esc_attr(strtolower(implode(' ', $tags))); ?>">
             <div class="cml-overview-row">
-                <h3><a href="<?php echo esc_url(get_permalink($piece)); ?>"><?php echo esc_html(get_the_title($piece)); ?></a></h3>
+                <h3><a href="<?php echo esc_url($piece_url); ?>"><?php echo esc_html(get_the_title($piece)); ?></a></h3>
                 <?php if ($data['composer']) : ?>
                     <p class="cml-overview-composer"><?php echo esc_html($data['composer']); ?></p>
                 <?php endif; ?>
@@ -1144,6 +1402,49 @@ final class CML_Choir_Music_Library {
             </div>
         </article>
         <?php
+    }
+
+    private function render_collection($post_id, $show_title = true) {
+        $post = get_post($post_id);
+
+        if (!$post || self::COLLECTION_POST_TYPE !== $post->post_type) {
+            return '';
+        }
+
+        wp_enqueue_style('cml-frontend');
+        wp_enqueue_script('cml-frontend');
+
+        if (!$this->current_user_can_access_collection($post_id)) {
+            return '<div class="cml-access-denied">' . esc_html($this->text('collection_access_denied')) . '</div>';
+        }
+
+        $data = $this->get_collection_data($post_id);
+        ob_start();
+        ?>
+        <article class="cml-piece cml-collection">
+            <header class="cml-piece-header">
+                <?php if ($show_title) : ?>
+                    <h1><?php echo esc_html(get_the_title($post)); ?></h1>
+                <?php endif; ?>
+                <?php if ($data['info']) : ?>
+                    <div class="cml-collection-info"><?php echo wp_kses_post(wpautop($data['info'])); ?></div>
+                <?php endif; ?>
+            </header>
+
+            <div class="cml-piece-collection is-list">
+                <?php foreach ($data['piece_ids'] as $piece_id) : ?>
+                    <?php $piece = get_post(absint($piece_id)); ?>
+                    <?php if (!$piece || self::POST_TYPE !== $piece->post_type || 'publish' !== $piece->post_status || !$this->current_user_can_access_piece($piece->ID)) {
+                        continue;
+                    } ?>
+                    <?php $this->render_overview_item($piece, $post_id); ?>
+                <?php endforeach; ?>
+            </div>
+            <?php $this->render_plugin_credit(); ?>
+        </article>
+        <?php
+
+        return ob_get_clean();
     }
 
     private function render_piece($post_id, $show_title = true) {
@@ -1162,13 +1463,16 @@ final class CML_Choir_Music_Library {
 
         $data = $this->get_piece_data($post_id);
         $tags = wp_get_post_terms($post_id, self::TAG_TAX, array('fields' => 'names'));
-        $overview_url = $this->get_overview_url();
+        $collection_context = $this->get_piece_collection_context($post_id);
+        $overview_url = $collection_context ? get_permalink($collection_context) : $this->get_overview_url();
 
         ob_start();
         ?>
         <article class="cml-piece">
             <?php if ($overview_url) : ?>
-                <a class="cml-back-link" href="<?php echo esc_url($overview_url); ?>"><?php echo esc_html($this->text('back_to_overview')); ?></a>
+                <a class="cml-back-link" href="<?php echo esc_url($overview_url); ?>">
+                    <?php echo esc_html($collection_context ? sprintf($this->text('back_to_collection'), get_the_title($collection_context)) : $this->text('back_to_overview')); ?>
+                </a>
             <?php endif; ?>
             <header class="cml-piece-header">
                 <?php if ($show_title) : ?>
@@ -1275,6 +1579,7 @@ final class CML_Choir_Music_Library {
         $download_url = $this->file_url($post_id, $attachment_id, false);
         $stream_url = $this->file_url($post_id, $attachment_id, true);
         $is_audio = 0 === strpos((string) $mime, 'audio/');
+        $is_pdf = 'application/pdf' === $mime;
         ?>
         <li class="cml-file-item">
             <div>
@@ -1283,7 +1588,12 @@ final class CML_Choir_Music_Library {
                     <audio controls preload="metadata" src="<?php echo esc_url($stream_url); ?>"></audio>
                 <?php endif; ?>
             </div>
-            <a class="cml-download-link" href="<?php echo esc_url($download_url); ?>"><?php echo esc_html($this->text('download')); ?></a>
+            <div class="cml-file-actions">
+                <?php if ($is_pdf) : ?>
+                    <button type="button" class="cml-preview-link" data-cml-pdf-preview="<?php echo esc_url($stream_url); ?>" data-cml-pdf-title="<?php echo esc_attr($title); ?>"><?php echo esc_html($this->text('preview')); ?></button>
+                <?php endif; ?>
+                <a class="cml-download-link" href="<?php echo esc_url($download_url); ?>"><?php echo esc_html($this->text('download')); ?></a>
+            </div>
         </li>
         <?php
     }
@@ -1740,6 +2050,21 @@ final class CML_Choir_Music_Library {
         return get_post_type_archive_link(self::POST_TYPE);
     }
 
+    private function get_piece_collection_context($piece_id) {
+        $collection_id = isset($_GET['cml_from_collection']) ? absint($_GET['cml_from_collection']) : 0;
+        if (!$collection_id || !$this->current_user_can_access_collection($collection_id)) {
+            return 0;
+        }
+
+        $collection = get_post($collection_id);
+        if (!$collection || self::COLLECTION_POST_TYPE !== $collection->post_type || 'publish' !== $collection->post_status) {
+            return 0;
+        }
+
+        $data = $this->get_collection_data($collection_id);
+        return in_array(absint($piece_id), array_map('absint', $data['piece_ids']), true) ? $collection_id : 0;
+    }
+
     private function current_user_can_submit_music() {
         if (current_user_can('manage_options')) {
             return true;
@@ -1843,6 +2168,26 @@ final class CML_Choir_Music_Library {
         return in_array((string) $level, $allowed_levels, true);
     }
 
+    private function current_user_can_access_collection($post_id) {
+        if (current_user_can('edit_post', $post_id)) {
+            return true;
+        }
+
+        $data = $this->get_collection_data($post_id);
+        $allowed_levels = array_map('strval', $data['allowed_levels']);
+        $level = $this->get_current_membership_level();
+
+        if (false === $level) {
+            return false;
+        }
+
+        if (empty($allowed_levels)) {
+            return true;
+        }
+
+        return in_array((string) $level, $allowed_levels, true);
+    }
+
     private function get_current_membership_level() {
         if (class_exists('SwpmMemberUtils')) {
             if (!SwpmMemberUtils::is_member_logged_in()) {
@@ -1880,6 +2225,25 @@ final class CML_Choir_Music_Library {
         }
 
         return array_merge($defaults, $data);
+    }
+
+    private function get_collection_data($post_id) {
+        $defaults = array(
+            'info' => '',
+            'allowed_levels' => array(),
+            'piece_ids' => array(),
+        );
+
+        $data = get_post_meta($post_id, self::COLLECTION_META_KEY, true);
+        if (!is_array($data)) {
+            $data = array();
+        }
+
+        $data = array_merge($defaults, $data);
+        $data['allowed_levels'] = $this->sanitize_scalar_list($data['allowed_levels']);
+        $data['piece_ids'] = is_array($data['piece_ids']) ? array_values(array_filter(array_map('absint', $data['piece_ids']))) : array();
+
+        return $data;
     }
 
     private function current_post_has_shortcode($shortcode) {
@@ -1921,9 +2285,22 @@ final class CML_Choir_Music_Library {
             'de' => array(
                 'pieces' => 'Musikstuecke',
                 'piece' => 'Musikstueck',
+                'piece_id' => 'ID',
                 'add_piece' => 'Neues Musikstueck anlegen',
                 'edit_piece' => 'Musikstueck bearbeiten',
                 'menu_name' => 'Chor-Noten',
+                'collections' => 'Sammlungen',
+                'collection' => 'Sammlung',
+                'collection_id' => 'ID',
+                'add_collection' => 'Neue Sammlung anlegen',
+                'edit_collection' => 'Sammlung bearbeiten',
+                'collection_information' => 'Sammlungs-Informationen',
+                'collection_info' => 'Weitere Informationen',
+                'collection_selected_pieces' => 'Musikstuecke in dieser Sammlung',
+                'collection_available_pieces' => 'Verfuegbare Musikstuecke',
+                'collection_drag_hint' => 'Musikstuecke per Drag and Drop sortieren.',
+                'collection_visibility_hint' => 'Leer lassen, wenn alle eingeloggten Mitglieder diese Sammlung sehen duerfen.',
+                'collection_access_denied' => 'Diese Sammlung ist fuer deine Mitgliedergruppe nicht freigegeben.',
                 'submissions' => 'Einreichungen',
                 'submission' => 'Einreichung',
                 'piece_tags' => 'Musikstueck-Tags',
@@ -1958,6 +2335,7 @@ final class CML_Choir_Music_Library {
                 'pronunciation' => 'Aussprachehilfe',
                 'misc' => 'Sonstiges',
                 'add_file' => 'Datei hinzufuegen',
+                'add' => 'Hinzufuegen',
                 'choose_file' => 'Datei auswaehlen',
                 'use_file' => 'Datei verwenden',
                 'change' => 'Aendern',
@@ -1995,6 +2373,8 @@ final class CML_Choir_Music_Library {
                 'apply' => 'Anwenden',
                 'access_denied' => 'Dieses Musikstueck ist fuer deine Mitgliedergruppe nicht freigegeben.',
                 'back_to_overview' => 'Zurueck zur Notenuebersicht',
+                'back_to_collection' => 'Zurueck zur Sammlung: %s',
+                'preview' => 'Vorschau',
                 'download' => 'Download',
                 'purchase_settings' => 'Zahlung',
                 'purchase_required' => 'Downloads erst nach Zahlung freischalten',
@@ -2014,9 +2394,22 @@ final class CML_Choir_Music_Library {
             'en' => array(
                 'pieces' => 'Music Pieces',
                 'piece' => 'Music Piece',
+                'piece_id' => 'ID',
                 'add_piece' => 'Add New Music Piece',
                 'edit_piece' => 'Edit Music Piece',
                 'menu_name' => 'Choir Scores',
+                'collections' => 'Collections',
+                'collection' => 'Collection',
+                'collection_id' => 'ID',
+                'add_collection' => 'Add New Collection',
+                'edit_collection' => 'Edit Collection',
+                'collection_information' => 'Collection Information',
+                'collection_info' => 'Additional Information',
+                'collection_selected_pieces' => 'Music Pieces in this Collection',
+                'collection_available_pieces' => 'Available Music Pieces',
+                'collection_drag_hint' => 'Drag and drop music pieces to sort them.',
+                'collection_visibility_hint' => 'Leave empty if all logged-in members may view this collection.',
+                'collection_access_denied' => 'This collection is not available for your member group.',
                 'submissions' => 'Submissions',
                 'submission' => 'Submission',
                 'piece_tags' => 'Music Piece Tags',
@@ -2051,6 +2444,7 @@ final class CML_Choir_Music_Library {
                 'pronunciation' => 'Pronunciation Help',
                 'misc' => 'Other Files',
                 'add_file' => 'Add File',
+                'add' => 'Add',
                 'choose_file' => 'Choose File',
                 'use_file' => 'Use File',
                 'change' => 'Change',
@@ -2088,6 +2482,8 @@ final class CML_Choir_Music_Library {
                 'apply' => 'Apply',
                 'access_denied' => 'This music piece is not available for your member group.',
                 'back_to_overview' => 'Back to Score Overview',
+                'back_to_collection' => 'Back to Collection: %s',
+                'preview' => 'Preview',
                 'download' => 'Download',
                 'purchase_settings' => 'Payment',
                 'purchase_required' => 'Unlock downloads only after payment',
@@ -2138,6 +2534,7 @@ CML_Choir_Music_Library::instance();
 
 register_activation_hook(__FILE__, function() {
     CML_Choir_Music_Library::instance()->register_post_type();
+    CML_Choir_Music_Library::instance()->register_collection_post_type();
     CML_Choir_Music_Library::instance()->register_taxonomy();
     flush_rewrite_rules();
 });
