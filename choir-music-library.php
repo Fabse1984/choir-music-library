@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Choir Music Library
  * Description: Geschuetzter Notenbereich fuer Chor-Webseiten mit Noten, Hoerbeispielen, Aussprachehilfen und Zusatzdateien.
- * Version: 1.3.2
+ * Version: 1.3.4
  * Author: Fabian Kaltenecker
  * Text Domain: choir-music-library
  */
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 }
 
 final class CML_Choir_Music_Library {
-    const VERSION = '1.3.2';
+    const VERSION = '1.3.4';
     const POST_TYPE = 'cml_piece';
     const COLLECTION_POST_TYPE = 'cml_collection';
     const SUBMISSION_POST_TYPE = 'cml_submission';
@@ -329,6 +329,7 @@ final class CML_Choir_Music_Library {
         $watermark_lead_text = get_option(self::OPTION_WATERMARK_LEAD_TEXT, '');
         $watermark_brand_text = get_option(self::OPTION_WATERMARK_BRAND_TEXT, '');
         $hide_watermark_brand_text = (bool) get_option(self::OPTION_WATERMARK_HIDE_BRAND_TEXT, 0);
+        $pdf_tools = $this->get_pdf_tool_status();
         if ('AllVoices' === $watermark_brand_text) {
             $watermark_brand_text = '';
         }
@@ -390,6 +391,23 @@ final class CML_Choir_Music_Library {
                                 <?php echo esc_html($this->text('watermark_hide_brand_text')); ?>
                             </label>
                             <p class="description"><?php echo esc_html($this->text('watermark_hide_brand_text_description')); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php echo esc_html($this->text('pdf_preprocessing')); ?></th>
+                        <td>
+                            <p class="description"><?php echo esc_html($this->text('pdf_preprocessing_description')); ?></p>
+                            <ul class="cml-pdf-tool-status">
+                                <li class="<?php echo $pdf_tools['qpdf'] ? 'cml-status-ok' : 'cml-status-missing'; ?>">
+                                    <?php echo esc_html(sprintf($this->text('pdf_tool_status'), 'qpdf', $pdf_tools['qpdf'] ? $this->text('available') : $this->text('not_available'))); ?>
+                                </li>
+                                <li class="<?php echo $pdf_tools['ghostscript'] ? 'cml-status-ok' : 'cml-status-missing'; ?>">
+                                    <?php echo esc_html(sprintf($this->text('pdf_tool_status'), 'Ghostscript', $pdf_tools['ghostscript'] ? $this->text('available') : $this->text('not_available'))); ?>
+                                </li>
+                                <li class="<?php echo $pdf_tools['exec'] ? 'cml-status-ok' : 'cml-status-missing'; ?>">
+                                    <?php echo esc_html(sprintf($this->text('pdf_tool_status'), 'PHP exec', $pdf_tools['exec'] ? $this->text('available') : $this->text('not_available'))); ?>
+                                </li>
+                            </ul>
                         </td>
                     </tr>
                 </table>
@@ -511,6 +529,7 @@ final class CML_Choir_Music_Library {
         $attachment_id = absint($file['id']);
         $title = $this->get_custom_file_title($file);
         $filename = $this->get_attachment_filename($attachment_id);
+        $pdf_warning = $this->get_pdf_admin_warning($attachment_id);
         ?>
         <div class="cml-file-row">
             <input type="hidden" name="cml[<?php echo esc_attr($group); ?>][]" value="<?php echo esc_attr($attachment_id); ?>" class="cml-file-id">
@@ -518,6 +537,9 @@ final class CML_Choir_Music_Library {
             <span class="cml-file-name"><?php echo esc_html($filename); ?></span>
             <button type="button" class="button cml-change-file"><?php echo esc_html($this->text('change')); ?></button>
             <button type="button" class="button-link-delete cml-remove-file"><?php echo esc_html($this->text('remove')); ?></button>
+            <?php if ($pdf_warning) : ?>
+                <p class="cml-pdf-warning"><?php echo esc_html($pdf_warning); ?></p>
+            <?php endif; ?>
         </div>
         <?php
     }
@@ -1859,7 +1881,13 @@ final class CML_Choir_Music_Library {
             return $path;
         }
 
-        return $this->create_watermarked_pdf($path, $piece_id, $attachment_id);
+        $watermarked_path = $this->create_watermarked_pdf($path, $piece_id, $attachment_id);
+        if (is_wp_error($watermarked_path)) {
+            $this->log_watermark_failure($watermarked_path, $piece_id, $attachment_id);
+            return $path;
+        }
+
+        return $watermarked_path;
     }
 
     private function should_watermark_piece($piece_id) {
@@ -1887,17 +1915,22 @@ final class CML_Choir_Music_Library {
         }
 
         $watermark = $this->get_watermark_text();
-        $cache_key = md5($path . '|' . filemtime($path) . '|' . get_current_user_id() . '|' . $this->get_current_member_email() . '|' . $watermark);
+        $cache_key = md5($path . '|' . filemtime($path) . '|' . get_current_user_id() . '|' . $this->get_current_member_email() . '|' . $watermark . '|' . self::VERSION);
         $target = trailingslashit($cache_dir) . $attachment_id . '-' . $piece_id . '-' . $cache_key . '.pdf';
 
         if (file_exists($target)) {
             return $target;
         }
 
+        $source_path = $this->prepare_pdf_source_for_watermark($path, $cache_dir, $cache_key);
+        if (is_wp_error($source_path)) {
+            return $source_path;
+        }
+
         try {
             $pdf = new CML_Watermarked_FPDI();
             $pdf->SetAutoPageBreak(false);
-            $page_count = $pdf->setSourceFile($path);
+            $page_count = $pdf->setSourceFile($source_path);
 
             for ($page = 1; $page <= $page_count; $page++) {
                 $template_id = $pdf->importPage($page);
@@ -1911,10 +1944,194 @@ final class CML_Choir_Music_Library {
 
             $pdf->Output('F', $target);
         } catch (Exception $exception) {
-            return new WP_Error('cml_pdf_watermark_failed', $this->text('pdf_watermark_failed'));
+            return new WP_Error('cml_pdf_watermark_failed', $this->text('pdf_watermark_failed'), array(
+                'exception' => $exception->getMessage(),
+            ));
         }
 
         return file_exists($target) ? $target : new WP_Error('cml_pdf_watermark_failed', $this->text('pdf_watermark_failed'));
+    }
+
+    private function prepare_pdf_source_for_watermark($path, $cache_dir, $cache_key) {
+        if (!$this->pdf_has_fpdi_unsupported_structures($path)) {
+            return $path;
+        }
+
+        $normalized_path = trailingslashit($cache_dir) . 'normalized-' . $cache_key . '.pdf';
+        if (file_exists($normalized_path)) {
+            return $normalized_path;
+        }
+
+        $converted_path = $this->normalize_pdf_with_qpdf($path, $normalized_path);
+        if (!is_wp_error($converted_path)) {
+            return $converted_path;
+        }
+
+        $converted_path = $this->normalize_pdf_with_ghostscript($path, $normalized_path);
+        if (!is_wp_error($converted_path)) {
+            return $converted_path;
+        }
+
+        return new WP_Error('cml_pdf_preprocessing_unavailable', $this->text('pdf_preprocessing_unavailable'), array(
+            'exception' => $this->text('pdf_preprocessing_unavailable'),
+        ));
+    }
+
+    private function normalize_pdf_with_qpdf($source, $target) {
+        $qpdf = $this->find_server_tool(array('qpdf'));
+        if (!$qpdf) {
+            return new WP_Error('cml_qpdf_missing', $this->text('pdf_preprocessing_unavailable'));
+        }
+
+        $command = escapeshellarg($qpdf) . ' --object-streams=disable --stream-data=preserve ' . escapeshellarg($source) . ' ' . escapeshellarg($target);
+        return $this->run_pdf_normalization_command($command, $target, 'qpdf');
+    }
+
+    private function normalize_pdf_with_ghostscript($source, $target) {
+        $ghostscript = $this->find_server_tool(array('gs', 'gswin64c', 'gswin32c'));
+        if (!$ghostscript) {
+            return new WP_Error('cml_ghostscript_missing', $this->text('pdf_preprocessing_unavailable'));
+        }
+
+        $command = escapeshellarg($ghostscript) . ' -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/prepress -dNOPAUSE -dQUIET -dBATCH -sOutputFile=' . escapeshellarg($target) . ' ' . escapeshellarg($source);
+        return $this->run_pdf_normalization_command($command, $target, 'Ghostscript');
+    }
+
+    private function run_pdf_normalization_command($command, $target, $tool_label) {
+        if (!function_exists('exec')) {
+            return new WP_Error('cml_exec_unavailable', $this->text('pdf_preprocessing_unavailable'));
+        }
+
+        $output = array();
+        $exit_code = 1;
+        exec($command . ' 2>&1', $output, $exit_code);
+
+        if (0 !== $exit_code || !file_exists($target) || 0 === filesize($target)) {
+            if (file_exists($target)) {
+                wp_delete_file($target);
+            }
+
+            return new WP_Error('cml_pdf_preprocessing_failed', $this->text('pdf_preprocessing_failed'), array(
+                'exception' => $tool_label . ': ' . implode(' ', array_map('sanitize_text_field', $output)),
+            ));
+        }
+
+        return $target;
+    }
+
+    private function log_watermark_failure($error, $piece_id, $attachment_id) {
+        if (!defined('WP_DEBUG') || !WP_DEBUG || !is_wp_error($error)) {
+            return;
+        }
+
+        $data = $error->get_error_data();
+        $detail = is_array($data) && !empty($data['exception']) ? ' Detail: ' . $data['exception'] : '';
+        error_log(sprintf(
+            'Choir Music Library: PDF watermark failed for piece %d, attachment %d. %s%s',
+            absint($piece_id),
+            absint($attachment_id),
+            $error->get_error_message(),
+            $detail
+        ));
+    }
+
+    private function get_pdf_admin_warning($attachment_id) {
+        if (!$attachment_id || 'application/pdf' !== get_post_mime_type($attachment_id)) {
+            return '';
+        }
+
+        $path = get_attached_file($attachment_id);
+        if (!$path || !file_exists($path) || !$this->pdf_has_fpdi_unsupported_structures($path)) {
+            return '';
+        }
+
+        if ($this->get_pdf_tool_status()['has_converter']) {
+            return $this->text('pdf_watermark_warning_with_converter');
+        }
+
+        return $this->text('pdf_watermark_warning');
+    }
+
+    private function pdf_has_fpdi_unsupported_structures($path) {
+        if (!is_readable($path)) {
+            return false;
+        }
+
+        $handle = fopen($path, 'rb');
+        if (!$handle) {
+            return false;
+        }
+
+        $found = false;
+        $carry = '';
+        while (!feof($handle)) {
+            $chunk = fread($handle, 1048576);
+            if (false === $chunk) {
+                break;
+            }
+
+            $search_chunk = $carry . $chunk;
+            if (false !== strpos($search_chunk, '/ObjStm') || false !== strpos($search_chunk, '/Type/XRef') || false !== strpos($search_chunk, '/Type /XRef')) {
+                $found = true;
+                break;
+            }
+
+            $carry = substr($search_chunk, -32);
+        }
+
+        fclose($handle);
+        return $found;
+    }
+
+    private function get_pdf_tool_status() {
+        $qpdf = $this->find_server_tool(array('qpdf'));
+        $ghostscript = $this->find_server_tool(array('gs', 'gswin64c', 'gswin32c'));
+
+        return array(
+            'qpdf' => $qpdf,
+            'ghostscript' => $ghostscript,
+            'exec' => function_exists('exec'),
+            'has_converter' => function_exists('exec') && (bool) ($qpdf || $ghostscript),
+        );
+    }
+
+    private function find_server_tool($commands) {
+        static $cache = array();
+
+        foreach ($commands as $command) {
+            if (isset($cache[$command])) {
+                if ($cache[$command]) {
+                    return $cache[$command];
+                }
+
+                continue;
+            }
+
+            $cache[$command] = '';
+            $paths = array(
+                '/usr/bin/' . $command,
+                '/usr/local/bin/' . $command,
+                '/opt/homebrew/bin/' . $command,
+                '/bin/' . $command,
+            );
+
+            foreach ($paths as $path) {
+                if (is_executable($path)) {
+                    $cache[$command] = $path;
+                    return $path;
+                }
+            }
+
+            if (function_exists('shell_exec')) {
+                $result = trim((string) shell_exec('command -v ' . escapeshellarg($command) . ' 2>/dev/null'));
+                if ('' !== $result && is_executable($result)) {
+                    $cache[$command] = $result;
+                    return $result;
+                }
+            }
+        }
+
+        return '';
     }
 
     private function load_pdf_libraries() {
@@ -2322,6 +2539,11 @@ final class CML_Choir_Music_Library {
                 'watermark_brand_text_description' => 'Dieser Text steht im Wasserzeichen vor Name, E-Mail und Datum. Leer lassen nutzt die Haupt-URL dieser Webseite.',
                 'watermark_hide_brand_text' => 'Wasserzeichen-Basistext nicht anzeigen',
                 'watermark_hide_brand_text_description' => 'Wenn aktiv, wird weder der eingetragene Basistext noch die Haupt-URL im Wasserzeichen ausgegeben.',
+                'pdf_preprocessing' => 'PDF-Vorverarbeitung',
+                'pdf_preprocessing_description' => 'Problematische PDF-Strukturen werden vor dem Wasserzeichen automatisch umgewandelt, wenn qpdf oder Ghostscript auf dem Server verfuegbar ist.',
+                'pdf_tool_status' => '%s: %s',
+                'available' => 'verfuegbar',
+                'not_available' => 'nicht verfuegbar',
                 'save_settings' => 'Einstellungen speichern',
                 'composer' => 'Komponist',
                 'lyricist' => 'Texter',
@@ -2390,6 +2612,10 @@ final class CML_Choir_Music_Library {
                 'purchase_missing_link' => 'Fuer dieses Musikstueck ist noch kein Kauflink oder Kauf-Shortcode hinterlegt.',
                 'pdf_library_missing' => 'Die PDF-Wasserzeichen-Bibliothek konnte nicht geladen werden.',
                 'pdf_watermark_failed' => 'Das PDF-Wasserzeichen konnte nicht erzeugt werden.',
+                'pdf_preprocessing_unavailable' => 'Dieses PDF nutzt komprimierte PDF-Strukturen. qpdf oder Ghostscript ist fuer die automatische Umwandlung nicht verfuegbar.',
+                'pdf_preprocessing_failed' => 'Das PDF konnte vor dem Wasserzeichen nicht umgewandelt werden.',
+                'pdf_watermark_warning' => 'Dieses PDF kann voraussichtlich nicht wassergezeichnet werden. Es nutzt komprimierte PDF-Strukturen, fuer die qpdf oder Ghostscript auf dem Server benoetigt wird.',
+                'pdf_watermark_warning_with_converter' => 'Dieses PDF nutzt komprimierte PDF-Strukturen. Es wird beim Download automatisch vorverarbeitet, bevor das Wasserzeichen erzeugt wird.',
             ),
             'en' => array(
                 'pieces' => 'Music Pieces',
@@ -2431,6 +2657,11 @@ final class CML_Choir_Music_Library {
                 'watermark_brand_text_description' => 'This text appears in the watermark before name, email, and date. Leave empty to use this site main URL.',
                 'watermark_hide_brand_text' => 'Do not show watermark base text',
                 'watermark_hide_brand_text_description' => 'When enabled, neither the custom base text nor the site main URL is shown in the watermark.',
+                'pdf_preprocessing' => 'PDF Preprocessing',
+                'pdf_preprocessing_description' => 'Problematic PDF structures are automatically converted before watermarking when qpdf or Ghostscript is available on the server.',
+                'pdf_tool_status' => '%s: %s',
+                'available' => 'available',
+                'not_available' => 'not available',
                 'save_settings' => 'Save Settings',
                 'composer' => 'Composer',
                 'lyricist' => 'Lyricist',
@@ -2499,6 +2730,10 @@ final class CML_Choir_Music_Library {
                 'purchase_missing_link' => 'No purchase link or purchase shortcode has been configured for this music piece yet.',
                 'pdf_library_missing' => 'The PDF watermark library could not be loaded.',
                 'pdf_watermark_failed' => 'The PDF watermark could not be created.',
+                'pdf_preprocessing_unavailable' => 'This PDF uses compressed PDF structures. qpdf or Ghostscript is required for automatic conversion and is not available.',
+                'pdf_preprocessing_failed' => 'The PDF could not be converted before watermarking.',
+                'pdf_watermark_warning' => 'This PDF probably cannot be watermarked. It uses compressed PDF structures that require qpdf or Ghostscript on the server.',
+                'pdf_watermark_warning_with_converter' => 'This PDF uses compressed PDF structures. It will be preprocessed automatically before watermarking during download.',
             ),
         );
 

@@ -56,6 +56,31 @@
     white-space: nowrap;
 }
 
+.cml-pdf-warning {
+    background: #fcf9e8;
+    border-left: 4px solid #dba617;
+    color: #3c434a;
+    grid-column: 1 / -1;
+    margin: 2px 0 0;
+    padding: 8px 10px;
+}
+
+.cml-pdf-tool-status {
+    margin: 8px 0 0;
+}
+
+.cml-pdf-tool-status li {
+    margin: 4px 0;
+}
+
+.cml-status-ok {
+    color: #008a20;
+}
+
+.cml-status-missing {
+    color: #b32d2e;
+}
+
 .cml-access-option {
     display: block;
     margin: 8px 0;
